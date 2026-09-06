@@ -125,7 +125,7 @@ async def worker_loop() -> None:
     while True:
         try:
             # brpop blocks until an item is available
-            result = await redis.brpop("satquery:query_queue", timeout=5)
+            result = await redis.brpop("satquery:query_queue", timeout=2)
             if result:
                 _, message = result
                 data = json.loads(message)

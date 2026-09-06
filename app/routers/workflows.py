@@ -39,13 +39,14 @@ async def get_workflow_result(run_id: str, db: AsyncSession = Depends(get_db)):
         status=run.status,
         findings=[
             FindingResponse(
+                finding_id=f.finding_id,
+                workflow=run.workflow,
                 label=f.label,
                 confidence=f.confidence,
-                evidence_refs=f.evidence_refs,
-                geometry=None # Simplified for MVP response
+                evidence_refs=f.evidence_refs or [],
             ) for f in findings
         ],
-        trace=run.trace,
+        trace=run.trace or [],
         error=run.error,
         duration_ms=run.duration_ms
     )
@@ -72,13 +73,14 @@ async def list_runs_for_query(query_id: str, db: AsyncSession = Depends(get_db))
                 status=run.status,
                 findings=[
                     FindingResponse(
+                        finding_id=f.finding_id,
+                        workflow=run.workflow,
                         label=f.label,
                         confidence=f.confidence,
-                        evidence_refs=f.evidence_refs,
-                        geometry=None
+                        evidence_refs=f.evidence_refs or [],
                     ) for f in findings
                 ],
-                trace=run.trace,
+                trace=run.trace or [],
                 error=run.error,
                 duration_ms=run.duration_ms
             )

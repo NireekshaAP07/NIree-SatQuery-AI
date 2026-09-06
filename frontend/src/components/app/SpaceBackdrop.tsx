@@ -30,7 +30,7 @@
  * hydration, and React would throw a mismatch on every load.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useHeroTransitionStore } from "@/hooks/useHeroTransition";
 import { prefersReducedMotion } from "@/lib/heroExit";
@@ -91,6 +91,7 @@ function buildStars(): Star[] {
 }
 
 export default function SpaceBackdrop() {
+  const [mounted, setMounted] = useState(false);
   const stars = useMemo(() => buildStars(), []);
   const travelNonce = useHeroTransitionStore((s) => s.travelNonce);
   const travelVariant = useHeroTransitionStore((s) => s.travelVariant);
@@ -98,6 +99,10 @@ export default function SpaceBackdrop() {
   const trackRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(0);
   const velocityRef = useRef(BASE_SPEED);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Each navigation bumps the nonce; that's the impulse. Applied as a
   // velocity change rather than a position jump so the sky accelerates
@@ -146,6 +151,14 @@ export default function SpaceBackdrop() {
       window.removeEventListener("resize", measure);
     };
   }, []);
+
+  if (!mounted) {
+    return (
+      <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute inset-0 bg-[var(--page-canvas)]" />
+      </div>
+    );
+  }
 
   return (
     // z-0, not a negative z-index: a negative value paints *behind* the

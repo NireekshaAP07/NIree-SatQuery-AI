@@ -84,7 +84,11 @@ async def upload_asset(file: UploadFile = File(...), db: AsyncSession = Depends(
         modality=modality,
         crs=geo_meta.get("crs"),
         bbox=bbox_wkt,
-        acquisition_time=geo_meta.get("acquisition_time")
+        acquisition_time=geo_meta.get("acquisition_time"),
+        width=geo_meta.get("width"),
+        height=geo_meta.get("height"),
+        band_count=geo_meta.get("band_count"),
+        file_size_bytes=len(file_bytes),
     )
     
     db.add(asset)
@@ -121,19 +125,20 @@ async def get_asset(asset_id: str, db: AsyncSession = Depends(get_db)):
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Asset '{asset_id}' not found.")
     
-    # Normally we'd extract bbox coordinates from PostGIS, but for simplicity here we return basic schema
+    # Normally we'd extract bbox coordinates from PostGIS via ST_AsGeoJSON;
+    # for now we return the fields persisted at upload time.
     return AssetMetadataResponse(
         asset_id=asset.asset_id,
-        filename=asset.uri.split('/')[-1],  # mock from URI
+        filename=asset.uri.split('/')[-1],
         modality=asset.modality,
-        file_size_bytes=0, # mock as we don't store it in db yet
+        file_size_bytes=asset.file_size_bytes or 0,
         storage_path=asset.uri,
         created_at=asset.created_at,
         crs=asset.crs,
-        bbox=None, # To parse PostGIS we'd need func.ST_AsGeoJSON etc. Mocking for now.
-        width=0,
-        height=0,
-        band_count=0,
+        bbox=None,  # PostGIS geometry read via ST_AsGeoJSON — deferred for now
+        width=asset.width,
+        height=asset.height,
+        band_count=asset.band_count,
         acquisition_time=asset.acquisition_time
     )
 
@@ -156,14 +161,14 @@ async def list_assets(skip: int = Query(0, ge=0), limit: int = Query(20, ge=1, l
             asset_id=asset.asset_id,
             filename=asset.uri.split('/')[-1],
             modality=asset.modality,
-            file_size_bytes=0,
+            file_size_bytes=asset.file_size_bytes or 0,
             storage_path=asset.uri,
             created_at=asset.created_at,
             crs=asset.crs,
             bbox=None,
-            width=0,
-            height=0,
-            band_count=0,
+            width=asset.width,
+            height=asset.height,
+            band_count=asset.band_count,
             acquisition_time=asset.acquisition_time
         ))
         

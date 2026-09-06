@@ -1,8 +1,9 @@
+# ImageAsset — stores uploaded satellite imagery records.
 import uuid
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Column, DateTime, Enum, String
+from sqlalchemy import Column, DateTime, Enum, Integer, String
 
 from app.core.database import Base
 from app.schemas.assets import ImageModality
@@ -18,3 +19,9 @@ class ImageAsset(Base):
     bbox = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=True)
     acquisition_time = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Spatial dimensions extracted at upload time
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    band_count = Column(Integer, nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+

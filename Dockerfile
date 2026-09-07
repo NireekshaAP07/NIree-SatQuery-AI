@@ -18,6 +18,14 @@ ENV GDAL_VERSION=3.6.2
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
+# Production settings
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    GUNICORN_WORKERS=4 \
+    GUNICORN_THREADS=2 \
+    GUNICORN_TIMEOUT=120 \
+    GUNICORN_KEEPALIVE=5
+
 WORKDIR /app
 
 COPY requirements.txt .
@@ -33,4 +41,14 @@ VOLUME ["/app/data"]
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Use gunicorn with uvicorn workers for production
+CMD ["sh", "-c", "gunicorn app.main:app \
+    --workers ${GUNICORN_WORKERS:-4} \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --threads ${GUNICORN_THREADS:-2} \
+    --timeout ${GUNICORN_TIMEOUT:-120} \
+    --keep-alive ${GUNICORN_KEEPALIVE:-5} \
+    --bind 0.0.0.0:8000 \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info"]

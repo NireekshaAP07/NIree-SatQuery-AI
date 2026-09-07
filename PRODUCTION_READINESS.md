@@ -1,14 +1,24 @@
 # SatQuery AI: Production Readiness Assessment
 
-While the MVP is fully functional and successfully integrates the frontend, backend, database, queue, and AI models, it is currently optimized for *local development*. 
+While the MVP is fully functional and successfully integrates the frontend, backend, database, queue, and AI models, it is currently optimized for *local development*.
 
 To make SatQuery AI **"Production Ready"**, we need to transition the infrastructure for scalability, data safety, and security. Here are the 5 major areas we need to tackle:
 
-## 1. Container Topology & Web Servers
-Currently, everything is launched via a single bash script (`start_dev.sh`), and the backend uses Uvicorn's `--reload` flag.
-* **Backend API**: We need to update the `Dockerfile` to use a production WSGI/ASGI manager like `gunicorn` with multiple `uvicorn` workers (e.g., `--workers 4`) to handle concurrent requests.
-* **Query Worker**: The background LangGraph worker needs its own dedicated Docker service in `docker-compose.yml` (so it can be scaled independently of the API).
-* **Frontend**: We need a Next.js `Dockerfile` that runs `npm run build` and starts the optimized production server, rather than the heavy `next dev` server.
+## 1. Container Topology & Web Servers ✅ **COMPLETED**
+**Status**: Deployed — *2026-09-08*
+
+**What was done:**
+* **Backend API**: Updated `Dockerfile` to use `gunicorn` with 4 `uvicorn` workers (configurable via `GUNICORN_WORKERS` env), 2 threads per worker, 120s timeout, 5s keepalive. Added production env vars (`PYTHONUNBUFFERED`, `PYTHONDONTWRITEBYTECODE`).
+* **Query Worker**: Added dedicated `worker` service in `docker-compose.yml` using same image, runs `python -m app.workers.query_worker`. Scales independently with its own resource limits (2 CPU, 2GB RAM).
+* **Frontend**: Created multi-stage `frontend/Dockerfile` (builder → runner). Uses `output: 'standalone'` in `next.config.ts`, runs `npm run build` then `node server.js` as non-root user (UID 1001).
+* **Docker Compose**: Expanded from 4 to 6 services (nginx, api, worker, frontend, db, redis). Added resource limits/reservations for all services. Removed live-reload volume mount from API.
+* **Nginx**: Enabled `frontend` upstream in `nginx/nginx.conf`, added proxy location `/` for frontend, kept `/api/` and `/ws/` for backend.
+* **Dockerignore**: Added `.dockerignore` at root and in `frontend/` to exclude dev files, caches, secrets, and build artifacts.
+
+**Verification:**
+* Frontend image builds successfully (~20s)
+* Backend image builds successfully (~15+ min due to torch/CUDA deps)
+* `docker compose config` validates without errors
 
 ## 2. Database Migrations (Alembic)
 Currently, `app/main.py` runs `init_db()` which uses `Base.metadata.create_all()` to forcefully create tables on startup.

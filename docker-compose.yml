@@ -18,6 +18,7 @@ services:
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       - api
+      - frontend
     restart: unless-stopped
 
   api:
@@ -28,7 +29,6 @@ services:
     env_file:
       - .env
     volumes:
-      - .:/app                       # Live code reload during development
       - satquery_data:/app/data      # Persistent dataset & output storage
     depends_on:
       db:
@@ -36,6 +36,58 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  worker:
+    build: .
+    container_name: satquery_worker
+    command: python -m app.workers.query_worker
+    env_file:
+      - .env
+    volumes:
+      - satquery_data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: satquery_frontend
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    depends_on:
+      - api
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   db:
     image: postgis/postgis:16-3.4   # PostgreSQL 16 with PostGIS 3.4

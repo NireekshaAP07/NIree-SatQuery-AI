@@ -122,10 +122,25 @@ class _StubModel:
         return []
 
 
+class _StubLLMResponse:
+    """Mimics the AIMessage returned by real LangChain LLMs."""
+    content: str = "[LLM stub — set GEMINI_API_KEY or OPENAI_API_KEY in .env to enable real inference]"
+
+    def __str__(self) -> str:
+        return self.content
+
+
 class _StubLLM:
     """Stub LLM returned when API key is not yet provided."""
-    def invoke(self, *args, **kwargs) -> str:
-        return "[LLM stub — set API key in .env to enable real inference]"
+    def invoke(self, *args, **kwargs) -> _StubLLMResponse:
+        return _StubLLMResponse()
+
+    def with_structured_output(self, schema):
+        """Returns a stub that raises a predictable exception instead of crashing unpredictably."""
+        class _StructuredStub:
+            def invoke(self, *a, **kw):
+                raise RuntimeError("LLM not configured — set GEMINI_API_KEY or OPENAI_API_KEY in .env")
+        return _StructuredStub()
 
 
 def _stub_processor() -> _StubProcessor:

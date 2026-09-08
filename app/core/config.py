@@ -36,6 +36,8 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = "change-me-in-production"
+    api_key: str | None = None
+    auth_required: bool = False
     allowed_origins: list[str] | str = ["http://localhost:3000"]
 
     @field_validator("allowed_origins", mode="after")
@@ -127,6 +129,9 @@ class Settings(BaseSettings):
     def model_post_init(self, __context) -> None:
         """Override sensitive fields with Docker secrets when available."""
         self.secret_key = _read_secret("secret_key", self.secret_key)
+        secret_api_key = _read_secret("api_key", "")
+        if secret_api_key:
+            self.api_key = secret_api_key
         self.openai_api_key = _read_secret("openai_api_key", self.openai_api_key)
         self.google_api_key = _read_secret("gemini_api_key", self.google_api_key)
         self.gemini_api_key = _read_secret("gemini_api_key", self.gemini_api_key)

@@ -1,0 +1,17 @@
+{
+  "report_id": "2159a0f3f86b4a3eb17abcfa67bca7d8",
+  "run_id": "400597464ebf4677aa79dfad56c836cc",
+  "summary": "This is a test summary.",
+  "evidence": [],
+  "findings": [
+    {
+      "finding_id": "996f8dd68c7e480d9a7ea10516e57346",
+      "label": "test_finding",
+      "answer": "test_answer",
+      "confidence": 0.95,
+      "properties": {
+        "workflow": "vqa"
+      }
+    }
+  ]
+}

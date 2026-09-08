@@ -48,6 +48,18 @@ def run(state: AgentState) -> dict[str, Any]:
     if not primary_path:
         return {"status": "error", "error": f"Asset path not found for {asset_ids[0]}.", "findings": []}
 
+    # Graceful fallback: if file is a remote URI or does not exist on disk
+    if not Path(str(primary_path)).is_file():
+        logger.warning("grounding_agent_asset_not_on_disk", path=primary_path)
+        return {
+            "status": "error",
+            "error": (
+                f"Asset file is not available on local disk (path: {primary_path}). "
+                "Upload a real raster file to run grounding."
+            ),
+            "findings": [],
+        }
+
     try:
         # ── 1. Import geospatial & AI modules ────────────────────────────────
         from app.geospatial.raster_handler import extract_raster_metadata

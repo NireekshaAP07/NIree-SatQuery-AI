@@ -1,0 +1,46 @@
+{
+  "type": "FeatureCollection",
+  "properties": {
+    "report_id": "2159a0f3f86b4a3eb17abcfa67bca7d8",
+    "summary": "This is a test summary."
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "finding_id": "996f8dd68c7e480d9a7ea10516e57346",
+        "label": "test_finding",
+        "answer": "test_answer",
+        "confidence": 0.95,
+        "workflow": "vqa"
+      }
+    }
+  ]
+}

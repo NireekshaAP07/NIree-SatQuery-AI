@@ -19,10 +19,10 @@ target_metadata = Base.metadata
 
 
 def _get_sync_url() -> str:
-    """Convert asyncpg URL → psycopg2 URL for Alembic's sync runner."""
+    """Convert asyncpg URL → psycopg URL for Alembic's sync runner."""
     url = os.environ.get("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
-    return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://").replace(
-        "postgresql+asyncio://", "postgresql+psycopg2://"
+    return url.replace("postgresql+asyncpg://", "postgresql+psycopg://").replace(
+        "postgresql+asyncio://", "postgresql+psycopg://"
     )
 
 

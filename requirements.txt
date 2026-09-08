@@ -16,7 +16,7 @@ python-dotenv==1.0.1
 # Database (PostgreSQL + PostGIS)
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
-psycopg2-binary==2.9.10
+psycopg[binary]
 geoalchemy2==0.15.2
 alembic==1.13.3
 
@@ -37,8 +37,8 @@ langchain-openai==0.2.3   # GPT-4o orchestrator (best production LLM)
 # VLM/VQA model packages are listed below as stubs.
 # Swap the specific model checkpoint via MODEL_NAME in your .env when ready.
 # ─────────────────────────────────────────────────────────────────────────────
-torch==2.4.1
-torchvision==0.19.1
+torch
+torchvision
 transformers==4.45.2
 accelerate==0.34.2
 sentencepiece==0.2.0
@@ -46,7 +46,7 @@ sentencepiece==0.2.0
 # Computer Vision
 opencv-python-headless==4.10.0.84
 Pillow==10.4.0
-numpy==1.26.4
+numpy
 scipy==1.14.1
 
 # Geospatial / GIS (GDAL installed via Dockerfile apt-get)

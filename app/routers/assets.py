@@ -303,3 +303,22 @@ async def delete_asset(asset_id: str, db: AsyncSession = Depends(get_db)):
     await db.delete(asset)
     await db.commit()
     logger.info("asset_deleted", asset_id=asset_id)
+
+
+@router.post(
+    "/demo/seed",
+    status_code=status.HTTP_200_OK,
+    summary="Seed the database and storage with example data",
+)
+async def seed_demo_data():
+    import sys
+    from pathlib import Path
+    # Ensure project root is in path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    try:
+        from scripts.seed_demo import seed
+        await seed(dry_run=False, force=True)
+        return {"status": "success", "message": "Real satellite example data loaded successfully."}
+    except Exception as exc:
+        logger.error("demo_seed_failed", error=str(exc))
+        raise HTTPException(status_code=500, detail=f"Failed to seed example data: {exc}")

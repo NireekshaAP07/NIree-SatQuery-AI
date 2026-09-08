@@ -29,19 +29,44 @@ class LocalStorageBackend:
         for subdir in ("raw", "derived", "tiles", "reports", "tmp"):
             (self.root / subdir).mkdir(parents=True, exist_ok=True)
 
-    def save_upload(self, file_bytes: bytes, original_filename: str, subdir: str = "raw") -> Path:
+    def save_upload(self, file_bytes: bytes, original_filename: str, subdir: str = "raw", preserve_name: bool = False) -> Path:
         """Saves an uploaded file and returns its absolute path."""
-        ext = Path(original_filename).suffix
-        unique_name = f"{uuid.uuid4().hex}{ext}"
-        dest = self.root / subdir / unique_name
+        if preserve_name:
+            dest = self.root / subdir / original_filename
+        else:
+            stem = Path(original_filename).stem
+            ext = Path(original_filename).suffix
+            clean_stem = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in stem)[:32]
+            unique_name = f"{clean_stem}_{uuid.uuid4().hex[:8]}{ext}" if clean_stem else f"{uuid.uuid4().hex}{ext}"
+            dest = self.root / subdir / unique_name
         dest.write_bytes(file_bytes)
         return dest
 
     def get_path(self, relative_or_path: str | Path) -> Path:
-        """Resolves a relative path safely within the storage root (prevents traversal)."""
+        """Resolves a path within storage root; falls back to filename-only search for Docker-originated absolute paths."""
         p = Path(relative_or_path)
-        if p.is_absolute() and str(p.resolve()).startswith(str(self.root.resolve())):
-            return p.resolve()
+        if p.is_absolute():
+            # Direct match: absolute path already lives under local root
+            try:
+                resolved = p.resolve()
+                if str(resolved).startswith(str(self.root.resolve())):
+                    return resolved
+            except Exception:
+                pass
+            # Docker-originated path: search by filename in all subdirs
+            filename = p.name
+            for subdir in ("raw", "derived", "tiles", "reports", "tmp"):
+                candidate = self.root / subdir / filename
+                if candidate.exists():
+                    return candidate.resolve()
+            # Last resort: rebuild using last two path components (subdir/file)
+            parts = p.parts
+            if len(parts) >= 2:
+                candidate = self.root / parts[-2] / parts[-1]
+                resolved = candidate.resolve()
+                if str(resolved).startswith(str(self.root.resolve())):
+                    return resolved
+            raise ValueError(f"Absolute path not resolvable under storage root: {relative_or_path}")
         resolved = (self.root / p).resolve()
         if not str(resolved).startswith(str(self.root.resolve())):
             raise ValueError(f"Path traversal attempt blocked: {relative_or_path}")

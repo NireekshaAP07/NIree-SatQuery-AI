@@ -6,6 +6,7 @@ import ThemeControls from "./ThemeControls";
 import { useHeroExitNavigation } from "@/hooks/useHeroTransition";
 import { HERO_EXIT_MS } from "@/lib/heroExit";
 import { palette } from "@/lib/theme";
+import { apiFetch } from "@/lib/api/client";
 
 const CAPABILITIES = [
   "Visual QA",
@@ -94,6 +95,31 @@ export default function HeroOverlay() {
 
             {/* The primary call to action: the hero sells the idea, this is
                 where a visitor goes to actually run one. */}
+            <button
+              onClick={async (event) => {
+                const btn = event.currentTarget;
+                const originalText = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = "Loading...";
+                try {
+                  await apiFetch("/assets/demo/seed", { method: "POST" });
+                  exitTo("/compare");
+                } catch (e: any) {
+                  alert(e.message || "Failed to load example project.");
+                  btn.disabled = false;
+                  btn.textContent = originalText;
+                }
+              }}
+              title="Load realistic satellite imagery and bi-temporal change example (2022 vs 2026)"
+              className="ml-2 cursor-pointer rounded-lg border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-all duration-200 hover:brightness-125"
+              style={{
+                borderColor: "rgba(184,99,26,0.4)",
+                background: "rgba(184,99,26,0.14)",
+                color: "var(--accent-warm)",
+              }}
+            >
+              Load Example Project
+            </button>
             <a
               href="/analyze"
               onClick={(event) => {

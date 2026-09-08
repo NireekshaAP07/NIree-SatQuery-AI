@@ -24,6 +24,9 @@ alembic==1.13.3
 redis==5.1.1
 tenacity==8.5.0
 
+# Storage (S3 / MinIO Distributed Object Storage)
+boto3==1.35.36
+
 # Agent Framework
 langgraph==0.2.35
 langchain==0.3.3

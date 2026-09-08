@@ -18,6 +18,7 @@ dependencies = [
     "geoalchemy2==0.15.2",
     "alembic==1.13.3",
     "redis==5.1.1",
+    "boto3==1.35.36",
     "langgraph==0.2.35",
     "langchain==0.3.3",
     "langchain-core==0.3.12",

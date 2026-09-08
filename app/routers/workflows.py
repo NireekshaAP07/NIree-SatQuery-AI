@@ -1,16 +1,17 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, status, Depends
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
-from app.core.logger import get_logger
-from app.schemas.workflows import FindingResponse, WorkflowResultResponse, WorkflowType
 from app.core.database import get_db
+from app.core.logger import get_logger
 from app.models.analysis_run import AnalysisRun
 from app.models.finding import Finding
+from app.schemas.workflows import FindingResponse, WorkflowResultResponse, WorkflowType
 
 router = APIRouter(prefix="/workflows", tags=["Specialist Workflows"])
 logger = get_logger("router.workflows")
@@ -29,8 +30,11 @@ async def get_workflow_result(run_id: str, db: AsyncSession = Depends(get_db)):
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run '{run_id}' not found.")
         
-    findings_result = await db.execute(select(Finding).where(Finding.run_id == run_id))
-    findings = findings_result.scalars().all()
+    findings_result = await db.execute(
+        select(Finding, func.ST_AsGeoJSON(Finding.geometry).label("geojson"))
+        .where(Finding.run_id == run_id)
+    )
+    findings = findings_result.all()
     
     return WorkflowResultResponse(
         run_id=run.run_id,
@@ -42,9 +46,13 @@ async def get_workflow_result(run_id: str, db: AsyncSession = Depends(get_db)):
                 finding_id=f.finding_id,
                 workflow=run.workflow,
                 label=f.label,
+                answer=f.answer,
                 confidence=f.confidence,
+                bounding_boxes=f.properties.get("bounding_boxes") if f.properties else None,
+                change_classes=f.properties.get("change_classes") if f.properties else None,
+                metadata=f.properties,
                 evidence_refs=f.evidence_refs or [],
-            ) for f in findings
+            ) for f, geojson in findings
         ],
         trace=run.trace or [],
         error=run.error,
@@ -63,8 +71,11 @@ async def list_runs_for_query(query_id: str, db: AsyncSession = Depends(get_db))
     
     responses = []
     for run in runs:
-        findings_result = await db.execute(select(Finding).where(Finding.run_id == run.run_id))
-        findings = findings_result.scalars().all()
+        findings_result = await db.execute(
+            select(Finding, func.ST_AsGeoJSON(Finding.geometry).label("geojson"))
+            .where(Finding.run_id == run.run_id)
+        )
+        findings = findings_result.all()
         responses.append(
             WorkflowResultResponse(
                 run_id=run.run_id,
@@ -76,9 +87,13 @@ async def list_runs_for_query(query_id: str, db: AsyncSession = Depends(get_db))
                         finding_id=f.finding_id,
                         workflow=run.workflow,
                         label=f.label,
+                        answer=f.answer,
                         confidence=f.confidence,
+                        bounding_boxes=f.properties.get("bounding_boxes") if f.properties else None,
+                        change_classes=f.properties.get("change_classes") if f.properties else None,
+                        metadata=f.properties,
                         evidence_refs=f.evidence_refs or [],
-                    ) for f in findings
+                    ) for f, geojson in findings
                 ],
                 trace=run.trace or [],
                 error=run.error,
@@ -92,7 +107,7 @@ async def store_workflow_result(
     db: AsyncSession,
     query_id: str,
     workflow: WorkflowType,
-    findings: list[FindingResponse],
+    findings: list[Any],
     trace: list[dict],
     duration_ms: Optional[float] = None,
     error: Optional[str] = None,
@@ -115,13 +130,36 @@ async def store_workflow_result(
     db.add(run)
     
     for f in findings:
+        f_dict = f.model_dump() if isinstance(f, BaseModel) else f
+        
+        properties = f_dict.get("metadata") or {}
+        boxes = f_dict.get("bounding_boxes") or []
+        box_2d = f_dict.get("box_2d")
+        if box_2d and not boxes:
+            boxes = [box_2d]
+            
+        geometry_wkt = None
+        if boxes:
+            properties["bounding_boxes"] = boxes
+            # Use the first box to create a PostGIS POLYGON WKT
+            b = boxes[0]
+            if isinstance(b, dict) and "x_min" in b:
+                xmin, ymin = b["x_min"], b["y_min"]
+                xmax, ymax = b["x_max"], b["y_max"]
+                geometry_wkt = f"POLYGON(({xmin} {ymin}, {xmax} {ymin}, {xmax} {ymax}, {xmin} {ymax}, {xmin} {ymin}))"
+
+        if "change_classes" in f_dict:
+            properties["change_classes"] = f_dict["change_classes"]
+            
         finding = Finding(
             finding_id=uuid.uuid4().hex,
             run_id=run_id,
-            label=f.label,
-            confidence=f.confidence,
-            evidence_refs=f.evidence_refs,
-            geometry=None # Simplification for MVP
+            label=f_dict.get("label"),
+            answer=f_dict.get("answer"),
+            properties=properties,
+            confidence=f_dict.get("confidence", 1.0),
+            evidence_refs=f_dict.get("evidence_refs", []),
+            geometry=geometry_wkt
         )
         db.add(finding)
         

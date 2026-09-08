@@ -15,6 +15,9 @@ satquery_backend/.env
 !.env.example
 !satquery_backend/.env.example
 
+# Docker secrets — actual values, never commit
+secrets/*.txt
+
 # Temporary and local storage
 satquery_backend/storage/uploads/*
 !satquery_backend/storage/uploads/.gitkeep

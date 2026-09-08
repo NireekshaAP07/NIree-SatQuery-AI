@@ -27,8 +27,10 @@ class SessionCreateResponse(BaseModel):
 
 class SessionInfoResponse(BaseModel):
     session_id: str
+    user_id: Optional[str] = None
     state: SessionState
     created_at: datetime
+    updated_at: Optional[datetime] = None
     query_count: int
     referenced_asset_ids: list[str]
     conversation_history: list[Any] = Field(default_factory=list)

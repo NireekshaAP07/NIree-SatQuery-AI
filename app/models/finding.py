@@ -15,6 +15,8 @@ class Finding(Base):
     run_id = Column(String, ForeignKey("analysis_runs.run_id"), nullable=False, index=True)
     geometry = Column(Geometry(geometry_type="GEOMETRY", srid=4326), nullable=True)
     label = Column(String, nullable=True)
+    answer = Column(String, nullable=True)
+    properties = Column(JSONB, nullable=True, default=dict)
     confidence = Column(Float, nullable=False)
     evidence_refs = Column(JSONB, nullable=False, default=list)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -50,8 +50,14 @@ class GeminiVisionClient:
 
         if self.api_key and GENAI_AVAILABLE:
             try:
+                # Support both legacy AIza... keys and new AQ. authentication keys
+                # (Google updated key format in 2026 — AQ. prefix is now standard)
                 self.client = genai.Client(api_key=self.api_key)
-                logger.info("gemini_client_initialized", model=self.model_name)
+                logger.info(
+                    "gemini_client_initialized",
+                    model=self.model_name,
+                    key_format="AQ." if self.api_key.startswith("AQ.") else "standard",
+                )
             except Exception as e:
                 logger.error("gemini_client_init_failed", error=str(e))
                 self.client = None
@@ -116,12 +122,23 @@ class GeminiVisionClient:
             return json.loads(cleaned)
 
         except Exception as e:
-            logger.error(
-                "gemini_api_request_failed",
-                job_id=job_id,
-                error=str(e),
-                message="Falling back to deterministic analysis.",
-            )
+            err_str = str(e)
+            # Provide clearer diagnostic for auth errors with new AQ. key format
+            if "401" in err_str or "API_KEY_INVALID" in err_str or "PERMISSION_DENIED" in err_str:
+                logger.error(
+                    "gemini_auth_failed",
+                    job_id=job_id,
+                    error=err_str,
+                    key_prefix=self.api_key[:6] if self.api_key else "None",
+                    message="API key rejected. Verify GEMINI_API_KEY in .env is valid.",
+                )
+            else:
+                logger.error(
+                    "gemini_api_request_failed",
+                    job_id=job_id,
+                    error=err_str,
+                    message="Falling back to deterministic analysis.",
+                )
             return self._offline_fallback_response(prompt, images)
 
     # ─────────────────────────────────────────────────────────────────────────

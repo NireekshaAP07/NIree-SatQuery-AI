@@ -98,8 +98,24 @@ def get_llm() -> Any:
         if not settings.google_api_key:
             logger.warning("llm_api_key_missing", provider="gemini")
             return _stub_llm()
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(model=model, google_api_key=settings.google_api_key, temperature=0)
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            # Both legacy AIza... keys and new AQ. keys are passed as-is;
+            # langchain-google-genai ≥4.0 supports both formats.
+            return ChatGoogleGenerativeAI(
+                model=model,
+                google_api_key=settings.google_api_key,
+                temperature=0,
+            )
+        except ImportError:
+            logger.error(
+                "langchain_google_genai_missing",
+                message="Run: pip install langchain-google-genai>=4.0.0",
+            )
+            return _stub_llm()
+        except Exception as e:
+            logger.error("gemini_llm_init_failed", error=str(e))
+            return _stub_llm()
 
     elif provider == "ollama":
         from langchain_ollama import ChatOllama

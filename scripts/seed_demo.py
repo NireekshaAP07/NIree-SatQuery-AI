@@ -58,23 +58,24 @@ DEMO_RUN_SAR_ID       = "demo0000000000000000000000000008"
 DEMO_REPORT_CD_ID     = "demo0000000000000000000000000009"
 DEMO_REPORT_SAR_ID    = "demo0000000000000000000000000010"
 
-# Exact WGS84 footprints calculated from UTM Zone 43N (EPSG:32643) bounds:
-# min_x=200000, max_x=205120, min_y=1900000, max_y=1905120 (1024x1024, 5m/px)
-BBOX_WKT = "SRID=4326;POLYGON((72.17936 17.16511, 72.22815 17.16511, 72.22815 17.21200, 72.17936 17.21200, 72.17936 17.16511))"
+# Real WGS84 footprint: Bengaluru East (Whitefield/KR Puram/Sarjapur corridor)
+# MODIS Terra 250m tiles — zoom 8, tile (183, 109) @ EPSG:4326
+# Area: 12.90°N-13.10°N, 77.55°E-77.75°E
+BBOX_WKT = "SRID=4326;POLYGON((77.55 12.90, 77.75 12.90, 77.75 13.10, 77.55 13.10, 77.55 12.90))"
 
-# Finding 1: New Residential Subdivision in north-western sector
-# Pixel box: [80, 180, 650, 480]
-FINDING_1_WKT = "SRID=4326;POLYGON((72.18345 17.18971, 72.21001 17.18971, 72.21001 17.20363, 72.18345 17.20363, 72.18345 17.18971))"
+# Finding 1: New IT/Tech Corridor Urban Expansion (Whitefield area NE sector)
+# Pixel box: [512, 256, 900, 700]
+FINDING_1_WKT = "SRID=4326;POLYGON((77.65 12.95, 77.72 12.95, 77.72 13.02, 77.65 13.02, 77.65 12.95))"
 
-# Finding 2: Active Construction Site & Earthworks in western sector
-# Pixel box: [60, 440, 280, 680]
-FINDING_2_WKT = "SRID=4326;POLYGON((72.18264 17.18067, 72.19281 17.18067, 72.19281 17.19165, 72.18264 17.19165, 72.18264 17.18067))"
+# Finding 2: Road Infrastructure and Residential Expansion (Sarjapur area)
+# Pixel box: [100, 500, 450, 850]
+FINDING_2_WKT = "SRID=4326;POLYGON((77.57 12.90, 77.64 12.90, 77.64 12.97, 77.57 12.97, 77.57 12.90))"
 
-# Finding 3: High-Density Built Structure Cluster (SAR Fusion)
-FINDING_3_WKT = "SRID=4326;POLYGON((72.18345 17.18971, 72.21001 17.18971, 72.21001 17.20363, 72.18345 17.20363, 72.18345 17.18971))"
+# Finding 3: High-Density Built Structure Cluster — SAR Fusion (KR Puram zone)
+FINDING_3_WKT = "SRID=4326;POLYGON((77.65 12.95, 77.72 12.95, 77.72 13.02, 77.65 13.02, 77.65 12.95))"
 
-# Finding 4: Meandering River Channel (SAR specular reflection)
-FINDING_4_WKT = "SRID=4326;POLYGON((72.18000 17.19900, 72.22600 17.19900, 72.22600 17.21150, 72.18000 17.21150, 72.18000 17.19900))"
+# Finding 4: Bellandur Lake (SAR specular reflection from water body)
+FINDING_4_WKT = "SRID=4326;POLYGON((77.65 12.90, 77.75 12.90, 77.75 12.97, 77.65 12.97, 77.65 12.90))"
 
 
 async def wipe_seed_data(db: AsyncSession) -> None:
@@ -162,14 +163,16 @@ async def seed(dry_run: bool = False, force: bool = False) -> None:
             conversation_history=[
                 {
                     "role": "user",
-                    "content": "Compare the 2022 and 2026 satellite observations to detect land cover changes and urban development.",
+                    "content": "Compare the 2019 and 2024 satellite observations to detect land cover changes and urban development in Bengaluru.",
                 },
                 {
                     "role": "assistant",
                     "content": (
-                        "Bi-temporal change detection complete. A major new residential subdivision "
-                        "and adjacent construction earthworks have been detected in the north-western sector, "
-                        "converting approximately 6 hectares of former agricultural fields into urban infrastructure."
+                        "Bi-temporal change detection complete. MODIS Terra 250m imagery comparison for Bengaluru East "
+                        "(Whitefield/Sarjapur corridor) reveals significant urban expansion between February 2019 and February 2024. "
+                        "The Whitefield IT corridor and Sarjapur Road zones show a mean spectral change index of 89.5, "
+                        "indicating major impervious surface growth. Two primary change regions identified: "
+                        "the Whitefield EPIP Zone tech-park expansion (est. 68 ha) and the Sarjapur Road residential densification (est. 52 ha)."
                     ),
                 },
             ],
@@ -178,42 +181,42 @@ async def seed(dry_run: bool = False, force: bool = False) -> None:
         await db.flush()
 
         # ── 4. Image Assets ───────────────────────────────────────────────────
-        # Asset 1: 2022 Optical baseline observation
+        # Asset 1: 2019 Optical baseline observation (MODIS Terra, Bengaluru)
         db.add(ImageAsset(
             asset_id=DEMO_ASSET_OPT_22_ID,
             uri=opt_22_uri,
             modality=ImageModality.optical,
-            crs="EPSG:32643",
+            crs="EPSG:4326",
             bbox=BBOX_WKT,
-            acquisition_time=datetime(2022, 3, 15, 10, 30, 0),
+            acquisition_time=datetime(2019, 2, 10, 5, 30, 0),
             width=1024,
             height=1024,
             band_count=3,
             file_size_bytes=opt_22_file.stat().st_size if opt_22_file.exists() else 0,
         ))
 
-        # Asset 2: 2026 Optical follow-up observation (with urban expansion)
+        # Asset 2: 2024 Optical follow-up observation (urban expansion clearly visible)
         db.add(ImageAsset(
             asset_id=DEMO_ASSET_OPT_26_ID,
             uri=opt_26_uri,
             modality=ImageModality.optical,
-            crs="EPSG:32643",
+            crs="EPSG:4326",
             bbox=BBOX_WKT,
-            acquisition_time=datetime(2026, 3, 15, 10, 30, 0),
+            acquisition_time=datetime(2024, 2, 10, 5, 30, 0),
             width=1024,
             height=1024,
             band_count=3,
             file_size_bytes=opt_26_file.stat().st_size if opt_26_file.exists() else 0,
         ))
 
-        # Asset 3: 2026 Dual-polarization SAR radar observation
+        # Asset 3: 2024 Dual-polarization SAR radar observation (derived from MODIS)
         db.add(ImageAsset(
             asset_id=DEMO_ASSET_SAR_26_ID,
             uri=sar_26_uri,
             modality=ImageModality.sar,
-            crs="EPSG:32643",
+            crs="EPSG:4326",
             bbox=BBOX_WKT,
-            acquisition_time=datetime(2026, 3, 16, 6, 15, 0),
+            acquisition_time=datetime(2024, 2, 11, 6, 15, 0),
             width=1024,
             height=1024,
             band_count=2,
@@ -222,11 +225,11 @@ async def seed(dry_run: bool = False, force: bool = False) -> None:
         await db.flush()
         logger.info("seeded_image_assets")
 
-        # ── 5. Query 1: Bi-temporal Change Detection (2022 vs 2026) ───────────
+        # ── 5. Query 1: Bi-temporal Change Detection (2019 vs 2024) ───────────
         db.add(Query(
             query_id=DEMO_QUERY_CD_ID,
             session_id=DEMO_SESSION_ID,
-            text="Compare the 2022 and 2026 satellite observations to detect land cover changes and urban development.",
+            text="Compare the 2019 and 2024 satellite observations to detect land cover changes and urban development in Bengaluru.",
             referenced_assets=[DEMO_ASSET_OPT_22_ID, DEMO_ASSET_OPT_26_ID],
             status="completed",
         ))
@@ -240,49 +243,49 @@ async def seed(dry_run: bool = False, force: bool = False) -> None:
             duration_ms=3140.0,
             trace=[
                 {"step": "router", "decision": "bi_temporal_change_detection"},
-                {"step": "co_registration", "status": "aligned_epsg_32643"},
-                {"step": "gemini_vision_vlm", "model": "gemini-2.5-pro", "status": "detections_extracted"},
-                {"step": "coordinate_transform", "status": "projected_to_wgs84"},
+                {"step": "co_registration", "status": "aligned_epsg_4326"},
+                {"step": "gemini_vision_vlm", "model": "gemini-2.5-flash", "status": "detections_extracted"},
+                {"step": "coordinate_transform", "status": "verified_wgs84"},
             ],
         ))
         await db.flush()
 
-        # Finding 1: New Residential Subdivision
+        # Finding 1: IT Corridor Urban Expansion — Whitefield/EPIP Zone
         db.add(Finding(
             finding_id=uuid.uuid4().hex,
             run_id=DEMO_RUN_CD_ID,
             geometry=FINDING_1_WKT,
-            label="New Residential Subdivision",
-            answer="Master-planned residential housing cluster constructed between 2022 and 2026 in the north-western sector, replacing former agricultural land.",
+            label="IT Corridor Urban Expansion (Whitefield)",
+            answer="Major tech-park and residential complex built between 2019 and 2024 in the Whitefield/EPIP Zone — one of Bengaluru's fastest-growing corridors. MODIS 250m imagery confirms significant increase in high-reflectance impervious surfaces.",
             confidence=0.96,
             properties={
                 "workflow": "change_detection",
-                "change_type": "Urban Expansion",
-                "before_state": "Agricultural crop fields",
-                "after_state": "Paved streets and multi-unit residential housing",
-                "estimated_area_m2": 42500,
+                "change_type": "Urban Expansion / Impervious Surface Growth",
+                "before_state": "Mixed vegetation and sparse settlements (2019)",
+                "after_state": "Dense IT park campus and multi-story residential towers (2024)",
+                "estimated_area_m2": 680000,
                 "bounding_boxes": [
-                    {"x_min": 80, "y_min": 180, "x_max": 650, "y_max": 480}
+                    {"x_min": 512, "y_min": 256, "x_max": 900, "y_max": 700}
                 ],
             },
         ))
 
-        # Finding 2: Active Construction Site
+        # Finding 2: Sarjapur Road Corridor Densification
         db.add(Finding(
             finding_id=uuid.uuid4().hex,
             run_id=DEMO_RUN_CD_ID,
             geometry=FINDING_2_WKT,
-            label="Active Construction Site & Earthworks",
-            answer="Commercial building foundation and ground clearing detected adjacent to the highway corridor in the western sector.",
-            confidence=0.92,
+            label="Sarjapur Road Corridor Densification",
+            answer="The Sarjapur Road corridor shows clear densification of built-up area between 2019 and 2024, with new apartment complexes and commercial strips replacing agricultural and vacant land.",
+            confidence=0.93,
             properties={
                 "workflow": "change_detection",
-                "change_type": "Land Clearing & Earthworks",
-                "before_state": "Vegetated agricultural terrain",
-                "after_state": "Excavated building foundations and access lanes",
-                "estimated_area_m2": 18200,
+                "change_type": "Residential & Commercial Densification",
+                "before_state": "Agricultural plots and sparse low-rise structures (2019)",
+                "after_state": "High-density residential apartments and commercial zones (2024)",
+                "estimated_area_m2": 520000,
                 "bounding_boxes": [
-                    {"x_min": 60, "y_min": 440, "x_max": 280, "y_max": 680}
+                    {"x_min": 100, "y_min": 500, "x_max": 450, "y_max": 850}
                 ],
             },
         ))
@@ -293,14 +296,15 @@ async def seed(dry_run: bool = False, force: bool = False) -> None:
             run_id=DEMO_RUN_CD_ID,
             session_id=DEMO_SESSION_ID,
             summary=(
-                "Bi-temporal satellite analysis between the 2022 and 2026 observations reveals substantial "
-                "anthropogenic landscape transformation. A new master-planned residential subdivision (approx. 4.25 ha) "
-                "and an active commercial construction site (approx. 1.82 ha) have been developed over former cropland. "
-                "The northern river hydrology, riparian corridor, and regional highway remain intact."
+                "Bi-temporal MODIS Terra satellite analysis (250m resolution) between February 2019 and February 2024 "
+                "for the Bengaluru East urban corridor reveals substantial anthropogenic transformation. "
+                "The Whitefield IT corridor and Sarjapur Road zone have experienced rapid impervious surface growth: "
+                "tech parks, apartment towers, and commercial strips now occupy areas that were vegetation and farmland in 2019. "
+                "Mean spectral change index: 89.5 (MODIS band composite). Bellandur Lake boundaries remain identifiable."
             ),
             evidence=[
-                {"type": "image", "asset_id": DEMO_ASSET_OPT_22_ID, "label": "Baseline (2022)"},
-                {"type": "image", "asset_id": DEMO_ASSET_OPT_26_ID, "label": "Observation (2026)"},
+                {"type": "image", "asset_id": DEMO_ASSET_OPT_22_ID, "label": "MODIS Terra Baseline (Feb 2019)"},
+                {"type": "image", "asset_id": DEMO_ASSET_OPT_26_ID, "label": "MODIS Terra Observation (Feb 2024)"},
             ],
         ))
         await db.flush()
@@ -310,7 +314,7 @@ async def seed(dry_run: bool = False, force: bool = False) -> None:
         db.add(Query(
             query_id=DEMO_QUERY_SAR_ID,
             session_id=DEMO_SESSION_ID,
-            text="Analyze radar backscatter and optical characteristics using Sentinel-1 SAR and ISRO optical fusion.",
+            text="Analyze radar backscatter and optical characteristics using SAR and MODIS optical fusion for the Bengaluru urban area.",
             referenced_assets=[DEMO_ASSET_OPT_26_ID, DEMO_ASSET_SAR_26_ID],
             status="completed",
         ))
@@ -370,14 +374,14 @@ async def seed(dry_run: bool = False, force: bool = False) -> None:
             run_id=DEMO_RUN_SAR_ID,
             session_id=DEMO_SESSION_ID,
             summary=(
-                "SAR-Optical multimodal fusion confirms high structural density in the newly built north-western "
-                "development zone via distinct microwave corner-reflector signatures. The winding river course in the "
-                "north is independently validated by specular microwave non-return. Fusion demonstrates 100% agreement "
-                "between radar backscatter and optical spectral classifications."
+                "SAR-Optical multimodal fusion analysis for Bengaluru East (2024) identifies dense urban build-up "
+                "in the Whitefield and KR Puram zones via high backscatter double-bounce signatures. "
+                "The Bellandur Lake water body is confirmed via near-zero SAR specular reflection co-located "
+                "with dark optical spectral tone. Fusion confidence: 0.91."
             ),
             evidence=[
-                {"type": "image", "asset_id": DEMO_ASSET_OPT_26_ID, "label": "Optical (2026)"},
-                {"type": "image", "asset_id": DEMO_ASSET_SAR_26_ID, "label": "SAR Radar (2026)"},
+                {"type": "image", "asset_id": DEMO_ASSET_OPT_26_ID, "label": "MODIS Optical (Feb 2024)"},
+                {"type": "image", "asset_id": DEMO_ASSET_SAR_26_ID, "label": "SAR Radar (Feb 2024)"},
             ],
         ))
         await db.commit()
@@ -385,12 +389,13 @@ async def seed(dry_run: bool = False, force: bool = False) -> None:
 
     await engine.dispose()
     print("\n✅  Real-world satellite example data seeded successfully!")
-    print(f"   Session ID:     {DEMO_SESSION_ID}")
-    print(f"   Optical 2022:   {DEMO_ASSET_OPT_22_ID} (Baseline)")
-    print(f"   Optical 2026:   {DEMO_ASSET_OPT_26_ID} (Observation)")
-    print(f"   SAR Radar 2026: {DEMO_ASSET_SAR_26_ID} (Multi-modal)")
-    print(f"   Reports:        {DEMO_REPORT_CD_ID} / {DEMO_REPORT_SAR_ID}")
-    print("\n   Open http://localhost:3000/compare to view the real-world satellite comparison.")
+    print(f"   Session ID:         {DEMO_SESSION_ID}")
+    print(f"   MODIS 2019 optical: {DEMO_ASSET_OPT_22_ID} (Bengaluru East baseline)")
+    print(f"   MODIS 2024 optical: {DEMO_ASSET_OPT_26_ID} (Bengaluru East observation)")
+    print(f"   SAR Radar 2024:     {DEMO_ASSET_SAR_26_ID} (Multi-modal)")
+    print(f"   Reports:            {DEMO_REPORT_CD_ID} / {DEMO_REPORT_SAR_ID}")
+    print("\n   Area: Bengaluru East (Whitefield/Sarjapur/KR Puram), 12.90-13.10°N, 77.55-77.75°E")
+    print("   Open http://localhost:3000/compare to view the real-world satellite comparison.")
 
 
 def _print_dry_run_summary(opt_22: str, opt_26: str, sar_26: str) -> None:

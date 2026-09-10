@@ -11,7 +11,7 @@
 
 /** Trailing slash stripped so `${BASE}/assets/` never doubles up. */
 export const API_BASE = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? ""
 ).replace(/\/+$/, "");
 
 export const API_PREFIX = "/api/v1";
@@ -123,7 +123,8 @@ function safeJsonParse(raw: string): unknown {
  * Mirrors the HTTP scheme so this works unchanged behind TLS.
  */
 export function traceSocketUrl(sessionId: string): string {
-  const base = API_BASE.replace(/^http/, "ws");
+  const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
+  const base = origin.replace(/^http/, "ws");
   return `${base}${API_PREFIX}/sessions/${sessionId}/ws`;
 }
 

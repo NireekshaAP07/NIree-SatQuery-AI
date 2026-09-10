@@ -43,13 +43,23 @@ class LocalStorageBackend:
         return dest
 
     def get_path(self, relative_or_path: str | Path) -> Path:
-        """Resolves a path within storage root; falls back to filename-only search for Docker-originated absolute paths."""
+        """Resolves a path within storage root; handles root-prefixed paths, relative paths, and filename lookups."""
         p = Path(relative_or_path)
+        root_res = self.root.resolve()
+
+        # 1. If p itself resolves to an existing file under root
+        try:
+            resolved = p.resolve()
+            if resolved.is_relative_to(root_res) and resolved.exists():
+                return resolved
+        except Exception:
+            pass
+
+        # 2. Absolute path handling
         if p.is_absolute():
-            # Direct match: absolute path already lives under local root
             try:
                 resolved = p.resolve()
-                if str(resolved).startswith(str(self.root.resolve())):
+                if resolved.is_relative_to(root_res):
                     return resolved
             except Exception:
                 pass
@@ -64,13 +74,42 @@ class LocalStorageBackend:
             if len(parts) >= 2:
                 candidate = self.root / parts[-2] / parts[-1]
                 resolved = candidate.resolve()
-                if str(resolved).startswith(str(self.root.resolve())):
+                if resolved.is_relative_to(root_res):
                     return resolved
             raise ValueError(f"Absolute path not resolvable under storage root: {relative_or_path}")
-        resolved = (self.root / p).resolve()
-        if not str(resolved).startswith(str(self.root.resolve())):
-            raise ValueError(f"Path traversal attempt blocked: {relative_or_path}")
-        return resolved
+
+        # 3. If relative, check if (self.root / p) exists directly
+        candidate = (self.root / p).resolve()
+        if candidate.is_relative_to(root_res) and candidate.exists():
+            return candidate
+
+        # 4. If p starts with root folder name e.g. "data/raw/foo" and root is "./data"
+        try:
+            if p.parts and p.parts[0] == self.root.name:
+                sub_candidate = (self.root / Path(*p.parts[1:])).resolve()
+                if sub_candidate.is_relative_to(root_res) and sub_candidate.exists():
+                    return sub_candidate
+        except Exception:
+            pass
+
+        # 5. Fallback search by filename in all subdirs
+        filename = p.name
+        for subdir in ("raw", "derived", "tiles", "reports", "tmp"):
+            cand = (self.root / subdir / filename).resolve()
+            if cand.exists():
+                return cand
+
+        # 6. For new paths being written
+        if candidate.is_relative_to(root_res):
+            return candidate
+
+        try:
+            if p.resolve().is_relative_to(root_res):
+                return p.resolve()
+        except Exception:
+            pass
+
+        raise ValueError(f"Path traversal attempt blocked: {relative_or_path}")
 
     def exists(self, relative_or_path: str | Path) -> bool:
         try:

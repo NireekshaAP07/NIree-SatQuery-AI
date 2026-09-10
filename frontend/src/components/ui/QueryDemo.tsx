@@ -6,10 +6,10 @@ import { useSceneStore } from "@/hooks/useSceneStore";
 import { palette } from "@/lib/theme";
 
 const SAMPLE_QUERIES = [
-  "What changed in this region between 2022 and 2026?",
-  "Find all built-up areas near the coastline.",
-  "Compare optical and SAR — which changes look significant?",
-  "What is visible in this image?",
+  "What changed in Bengaluru between 2019 and 2024?",
+  "Find all built-up areas near the Whitefield IT corridor.",
+  "Compare optical and SAR — which urban changes look significant?",
+  "What is visible in this MODIS image?",
 ];
 
 const PIPELINE_STEPS = [

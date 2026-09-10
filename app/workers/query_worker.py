@@ -74,7 +74,10 @@ async def process_query(query_id: str, session_id: str) -> None:
                     logger.error("s3_asset_download_failed", asset_id=aid, error=str(dl_exc))
                     asset_paths[aid] = uri  # Fall back; agent will fail gracefully
             else:
-                asset_paths[aid] = uri
+                try:
+                    asset_paths[aid] = str(storage.get_path(uri))
+                except Exception:
+                    asset_paths[aid] = uri
 
         # Retrieve Session to get conversation history
         session_res = await db.execute(select(Session).where(Session.session_id == session_id))

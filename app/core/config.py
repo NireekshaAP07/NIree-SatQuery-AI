@@ -17,7 +17,10 @@ def _read_secret(name: str, env_fallback: str) -> str:
         content = secret_path.read_text().strip()
         lines = [line.strip() for line in content.splitlines() if line.strip() and not line.strip().startswith("#")]
         if lines:
-            return lines[-1]
+            val = lines[-1]
+            # Ignore placeholder strings so valid .env configuration is not clobbered
+            if not val.startswith("PLACEHOLDER_") and not val.startswith("replace_"):
+                return val
     return env_fallback
 
 
@@ -124,7 +127,7 @@ class Settings(BaseSettings):
     # If not set, the client operates in offline/heuristic mode automatically.
     # ──────────────────────────────────────────────────────────────────────────
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.5-flash"
 
     def model_post_init(self, __context) -> None:
         """Override sensitive fields with Docker secrets when available."""

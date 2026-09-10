@@ -204,46 +204,46 @@ def route_after_validation(state: AgentState) -> Literal["evidence", "error"]:
 def build_graph() -> StateGraph:
     g = StateGraph(AgentState)
 
-    # Add nodes
-    g.add_node("plan", plan_node)
+    # Add nodes (names must not clash with AgentState field names)
+    g.add_node("planner", plan_node)
     g.add_node("vqa", vqa_node)
     g.add_node("captioning", captioning_node)
     g.add_node("grounding", grounding_node)
     g.add_node("change_detection", change_detection_node)
     g.add_node("sar_fusion", sar_fusion_node)
     g.add_node("validation", validation_node)
-    g.add_node("evidence", evidence_node)
+    g.add_node("evidence_collector", evidence_node)
     g.add_node("report", report_node)
-    g.add_node("error", error_node)
+    g.add_node("error_handler", error_node)
 
     # Entry
-    g.add_edge(START, "plan")
+    g.add_edge(START, "planner")
 
     # Planner → specialist routing
-    g.add_conditional_edges("plan", route_after_plan, {
+    g.add_conditional_edges("planner", route_after_plan, {
         "vqa": "vqa",
         "captioning": "captioning",
         "grounding": "grounding",
         "change_detection": "change_detection",
         "sar_fusion": "sar_fusion",
-        "error": "error",
+        "error": "error_handler",
     })
 
     # Each specialist → validation or evidence
     for specialist in ("vqa", "captioning", "grounding", "change_detection", "sar_fusion"):
         g.add_conditional_edges(specialist, route_after_specialist, {
             "validation": "validation",
-            "evidence": "evidence",
+            "evidence": "evidence_collector",
         })
 
     g.add_conditional_edges("validation", route_after_validation, {
-        "evidence": "evidence",
-        "error": "error",
+        "evidence": "evidence_collector",
+        "error": "error_handler",
     })
 
-    g.add_edge("evidence", "report")
+    g.add_edge("evidence_collector", "report")
     g.add_edge("report", END)
-    g.add_edge("error", END)
+    g.add_edge("error_handler", END)
 
     return g
 

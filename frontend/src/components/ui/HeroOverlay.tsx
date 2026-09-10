@@ -110,7 +110,7 @@ export default function HeroOverlay() {
                   btn.textContent = originalText;
                 }
               }}
-              title="Load realistic satellite imagery and bi-temporal change example (2022 vs 2026)"
+              title="Load real MODIS Terra satellite imagery of Bengaluru East — compare 2019 vs 2024 urban expansion"
               className="ml-2 cursor-pointer rounded-lg border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-all duration-200 hover:brightness-125"
               style={{
                 borderColor: "rgba(184,99,26,0.4)",

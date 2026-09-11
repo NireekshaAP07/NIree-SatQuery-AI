@@ -14,12 +14,14 @@ import ThemeSync from "@/components/app/ThemeSync";
  * render-blocking stylesheet. A real high-contrast serif rather than
  * whatever serif the OS happens to supply.
  *
- * Upright only — nothing sets this face in italic, and loading a cut that
- * never renders is a font file downloaded for nothing.
+ * Both cuts ship: the headline's second line is set in the true italic, and
+ * a real italic is a different drawing of the letters — not the upright
+ * sheared over, which is what the browser synthesises if the cut is absent.
  */
 const display = Instrument_Serif({
   subsets: ["latin"],
   weight: "400",
+  style: ["normal", "italic"],
   display: "swap",
   variable: "--font-display",
 });

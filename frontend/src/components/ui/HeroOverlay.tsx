@@ -119,10 +119,10 @@ export default function HeroOverlay() {
 
           {/* Set large with tight leading and slightly negative tracking —
               a display face wants to be set like a masthead, not like body
-              copy scaled up. Both lines use the same upright cut, so colour
-              alone carries the emphasis: a flat accent rather than a
-              gradient, which at this size reads as a decal laid over the
-              letterforms instead of as colour. */}
+              copy scaled up. The turn in the question gets the turn in the
+              type: line two switches to the true italic and picks up the
+              cool-to-warm accent gradient, so the emphasis lands on the
+              idea rather than on a heavier weight. */}
           <h1
             className="text-balance text-5xl font-normal leading-[0.95] tracking-[-0.02em] sm:text-6xl lg:text-7xl"
             style={{
@@ -132,7 +132,18 @@ export default function HeroOverlay() {
           >
             What if Earth
             <br />
-            <span style={{ color: "var(--accent)" }}>could answer back?</span>
+            <span
+              className="italic"
+              style={{
+                background:
+                  "linear-gradient(100deg, var(--accent), var(--accent-warm))",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+              }}
+            >
+              could answer back?
+            </span>
           </h1>
 
           <div className="pointer-events-auto mt-8">

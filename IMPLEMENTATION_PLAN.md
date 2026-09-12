@@ -1,224 +1,243 @@
-# SatQuery AI: Production Readiness Implementation Plan
-
-## Overview
-This plan addresses the 4 remaining items from `PRODUCTION_READINESS.md` after Container Topology (#1) was completed.
+# SatQuery AI: Implementation Plan
 
 ---
 
-## Priority 1: Database Migrations (Alembic) — Foundation
+## Part 1: Production Readiness
 
-### Current State
-- `app/main.py:32-34` runs `init_db()` using `Base.metadata.create_all()` only in development
-- `satquery_backend/app/db/database.py:35-49` contains `init_db()` that forcefully creates tables
-- No migration system exists — schema changes require manual SQL or table drops
-
-### Implementation Steps
-
-1. **Initialize Alembic**
-   - Run `alembic init app/db/migrations` in the backend directory
-   - Configure `alembic.ini` with SQLAlchemy URL from settings
-   - Update `env.py` to use async engine and import models
-
-2. **Generate Initial Migration**
-   - Create baseline migration from current models (`SessionModel`, `ImageAssetModel`, `AnalysisJobModel`, `FindingModel`, `ReportModel`)
-   - Review generated migration for correctness
-
-3. **Update Startup Logic**
-   - Replace `init_db()` call in `app/main.py:33` with `alembic upgrade head`
-   - Add migration command to Docker entrypoint or startup script
-   - Keep `create_all()` as fallback for fresh dev databases (optional)
-
-4. **Add Migration Utilities**
-   - Create `app/db/migrate.py` with `run_migrations()` function
-   - Add `make migration "message"` helper script
-
-### Files to Modify
-- `satquery_backend/alembic.ini` (new)
-- `satquery_backend/app/db/migrations/` (new directory)
-- `satquery_backend/app/db/migrate.py` (new)
-- `app/main.py` (modify lifespan)
-- `docker-compose.yml` (add migration step to api service command)
-
-### Verification
-- Run migrations on fresh DB → tables created correctly
-- Modify a model (e.g., add column) → generate migration → apply → schema updated
-- Rollback migration → schema reverts
+> Overview: Addresses the 4 remaining items after Container Topology (#1) was completed.
 
 ---
 
-## Priority 2: Distributed Storage (S3 Backend) — Scalability
+### Priority 1: Database Migrations (Alembic) — Foundation ✅ Done
 
-### Current State
-- `app/core/storage.py` has `LocalStorageBackend` only
-- `get_storage()` raises `NotImplementedError` for `s3` backend
-- Files stored in Docker volume `./data` (not shared across nodes)
-- Assets router uses `storage.save_upload()` and `storage.get_path()`
+**Current State**
+- `app/main.py:32-34` — schema is managed by Alembic (`migrate` service runs `alembic upgrade head` at startup)
+- `docker-compose.yml` — `migrate` service runs before `api` and `worker`
 
-### Implementation Steps
+**Implementation Steps**
+1. Initialize Alembic — `alembic init alembic` in the project root
+2. Configure `alembic.ini` with SQLAlchemy URL from settings
+3. Update `env.py` to use async engine and import models
+4. Generate baseline migration from current models (`Session`, `ImageAsset`, `AnalysisRun`, `Finding`, `Report`, `Query`)
+5. Add migration command to Docker entrypoint via dedicated `migrate` service
 
-1. **Create S3StorageBackend Class**
-   - Use `boto3` or `aioboto3` for async S3 operations
-   - Implement same interface as `LocalStorageBackend`:
-     - `save_upload(bytes, filename, subdir) -> str` (returns S3 key)
-     - `get_path(key) -> str` (returns presigned URL or S3 URI)
-     - `delete(key) -> None`
-     - `save_derived(bytes, filename) -> str`
-   - Support S3-compatible endpoints (MinIO, GCS, R2, etc.)
-
-2. **Add S3 Configuration to Settings**
-   - Add `s3_bucket_name`, `s3_endpoint_url`, `s3_region`, `s3_access_key_id`, `s3_secret_access_key` to `app/core/config.py`
-   - Validate required fields when `storage_backend == "s3"`
-
-3. **Update get_storage() Factory**
-   - Return `S3StorageBackend` when `STORAGE_BACKEND=s3`
-   - Pass config from settings
-
-4. **Update Assets Router for S3**
-   - `storage.save_upload()` returns S3 key → store in DB
-   - `storage.get_path()` returns presigned URL for preview/download
-   - Preview endpoint: generate presigned URL for cached PNG or stream from S3
-
-5. **Docker Compose Updates**
-   - Remove `satquery_data` volume mount from `api` and `worker` services when using S3
-   - Add S3 env vars to `.env.example`
-
-### Files to Modify
-- `app/core/storage.py` (add S3StorageBackend)
-- `app/core/config.py` (add S3 settings)
-- `app/routers/assets.py` (handle S3 paths/URLs)
-- `docker-compose.yml` (conditional volume mounts)
-- `.env.example` (add S3 variables)
-
-### Verification
-- Set `STORAGE_BACKEND=s3` with MinIO local → upload asset → stored in bucket
-- List assets → metadata correct
-- Get preview → serves via presigned URL
-- Delete asset → removed from S3 and DB
+**Files Modified**
+- `alembic.ini`
+- `alembic/env.py`
+- `docker-compose.yml` (migrate service added)
 
 ---
 
-## Priority 3: Reverse Proxy & HTTPS — Network Security
+### Priority 2: Distributed Storage (S3 Backend) — Scalability ✅ Done
 
-### Current State
-- `nginx/nginx.conf` already has:
-  - HTTP→HTTPS redirect (port 80→443)
-  - SSL termination with certs in `./nginx/certs/`
-  - Upstreams for `backend` (api:8000) and `frontend` (frontend:3000)
-  - Proxy config for `/api/`, `/ws/`, and `/`
-- Certs are self-signed placeholders (`cert.pem`, `key.pem`)
+**Current State**
+- `app/core/storage.py` has both `LocalStorageBackend` and `S3StorageBackend`
+- `get_storage()` returns the correct backend based on `STORAGE_BACKEND` env var
+- For Oracle Cloud deployment: `STORAGE_BACKEND=local` (200 GB boot volume)
 
-### Implementation Steps
-
-1. **Production SSL Certificates**
-   - Replace self-signed certs with Let's Encrypt or CA-signed certs
-   - Document cert renewal process (certbot or ACME client)
-   - Add cert validation to CI/CD
-
-2. **Nginx Hardening**
-   - Add security headers (HSTS, CSP, X-Frame-Options, etc.)
-   - Rate limiting for `/api/` endpoints
-   - Request size limits matching `MAX_UPLOAD_SIZE_MB`
-   - Hide server version
-
-3. **Docker Compose for Production**
-   - Create `docker-compose.prod.yml` with:
-     - No exposed DB/Redis ports (internal only)
-     - Nginx as only public entrypoint
-     - Resource limits tuned for production
-     - Healthchecks for all services
-
-4. **Environment-Specific Config**
-   - Separate `.env.production` template
-   - `ALLOWED_ORIGINS` set to production domain only
-   - `APP_ENV=production`
-
-### Files to Modify
-- `nginx/nginx.conf` (add security headers, rate limiting)
-- `docker-compose.yml` (create production override or separate file)
-- `.env.example` (add production template)
-- Documentation for SSL setup
-
-### Verification
-- HTTPS works with valid cert (browser shows 🔒)
-- HTTP redirects to HTTPS
-- Security headers present in responses
-- Rate limiting triggers on abuse
-- No internal ports exposed externally
+**Files Modified**
+- `app/core/storage.py`
+- `app/core/config.py`
 
 ---
 
-## Priority 4: Security Hardening — Defense in Depth
+### Priority 3: Reverse Proxy & HTTP Server — Network ✅ Done
 
-### Current State
-- CORS allows `http://localhost:3000,http://localhost:5173` (hardcoded in `.env`)
-- Secrets in `.env` file on disk
-- `SECRET_KEY` is placeholder
-- No API authentication visible in routers (auth router exists but not inspected)
+**Current State**
+- `nginx/nginx.conf` — Nginx handles HTTP on port 80 (port 443 HTTPS for local SSL)
+- Upstreams: `api:8000` (FastAPI/Gunicorn) and `frontend:3000` (Next.js)
+- WebSocket upgrade headers included for `/api/v1/sessions/{id}/ws`
+- Port 80 server block updated to proxy directly (no forced HTTP→HTTPS redirect) so tunnel/reverse-proxy deployments work
 
-### Implementation Steps
-
-1. **CORS Lockdown**
-   - Validate `ALLOWED_ORIGINS` parsing in production
-   - Reject `*` or localhost in production mode
-   - Add startup warning if `APP_ENV=production` but origins contain localhost
-
-2. **Secrets Management**
-   - Remove sensitive values from `.env.example` (keep placeholders)
-   - Document Docker Secrets usage:
-     - `POSTGRES_PASSWORD` → `/run/secrets/postgres_password`
-     - `OPENAI_API_KEY` → `/run/secrets/openai_api_key`
-     - `SECRET_KEY` → `/run/secrets/secret_key`
-   - Update `config.py` to read from Docker Secrets files when present
-
-3. **API Authentication**
-   - Inspect `app/routers/auth.py` for current implementation
-   - Ensure JWT tokens have expiry, refresh mechanism
-   - Add API key authentication for service-to-service (worker→api)
-
-4. **Security Headers & Middleware**
-   - Verify `SecurityMiddleware` in `app/middleware/security.py` adds headers
-   - Add request validation (size, content-type)
-   - Implement audit logging for sensitive operations
-
-5. **Dependency Scanning**
-   - Add `pip-audit` or `safety` to CI
-   - Pin all dependencies (already done in requirements.txt)
-
-### Files to Modify
-- `app/core/config.py` (read secrets from files, validate CORS)
-- `app/middleware/security.py` (verify/enhance headers)
-- `app/routers/auth.py` (review auth implementation)
-- `docker-compose.yml` (add secrets mounts)
-- `.env.example` (sanitize)
-- CI/CD pipeline (add dependency scanning)
-
-### Verification
-- Production deploy rejects localhost CORS
-- Secrets not visible in `docker inspect` or container fs
-- Auth required for all `/api/v1/*` endpoints
-- Security headers present
-- No known vulnerabilities in dependencies
+**Files Modified**
+- `nginx/nginx.conf`
 
 ---
 
-## Implementation Order & Dependencies
+### Priority 4: Security Hardening — Defense in Depth 🔄 Deferred (post-SIH)
 
-```
-Week 1: Priority 1 (Alembic) — Independent, foundational
-Week 2: Priority 2 (S3) — Independent, enables horizontal scaling
-Week 3: Priority 3 (HTTPS) — Depends on DNS/domain, can parallelize
-Week 4: Priority 4 (Security) — Depends on 1-3, final hardening
+**Current State**
+- CORS configured via `ALLOWED_ORIGINS` env var — set in `.env.prod` for Oracle deployment
+- `SECRET_KEY` via env var
+- Auth router (`app/routers/auth.py`) in place with JWT
+- `SecurityMiddleware` adds headers
+
+**Post-SIH TODO**
+- Let's Encrypt SSL (certbot) on Oracle VM domain
+- Move to `APP_ENV=production` with HTTPS-only CORS validation
+- Docker Secrets for production credentials
+- Dependency scanning (pip-audit)
+
+---
+
+## Part 2: MVP Deployment — Oracle Cloud Free Tier
+
+> **₹0 forever. 4 ARM CPUs, 24 GB RAM. No cold starts. No credit required beyond identity verification.**
+
+---
+
+### What Was Changed for Oracle Deployment
+
+#### [`Dockerfile`](file:///home/kishanravi/SatQuery_AI/Dockerfile)
+```dockerfile
+# syntax=docker/dockerfile:1.7
+FROM python:3.11-slim
+
+# BuildKit cache mounts — apt and pip packages NEVER re-downloaded on code changes
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    gdal-bin libgdal-dev libgeos-dev libproj-dev libpq-dev gcc g++ curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
+    && pip install GDAL==$(gdal-config --version) \
+    && pip install -r requirements.txt
+
+COPY . .   # ← only this layer rebuilds on code changes
 ```
 
+**Result:** First build ~8 min. Every subsequent `git pull` + rebuild ~90 seconds.
+
+#### [`requirements.txt`](file:///home/kishanravi/SatQuery_AI/requirements.txt)
+Removed: `torch`, `torchvision`, `transformers`, `accelerate`, `sentencepiece`
+- These are **3.3 GB of local GPU model dependencies not used in the Gemini API-based MVP**
+- The VLM stub in `model_provider.py:51-56` handles this gracefully
+- Moved to [`requirements-gpu.txt`](file:///home/kishanravi/SatQuery_AI/requirements-gpu.txt) for future local GPU dev
+
+#### [`docker-compose.prod.yml`](file:///home/kishanravi/SatQuery_AI/docker-compose.prod.yml)
+Simplified version of `docker-compose.yml`:
+- No MinIO / minio-init (uses `STORAGE_BACKEND=local` on Oracle's 200 GB disk)
+- No Docker secrets (uses `.env.prod` file directly)
+- DB and Redis bound to `127.0.0.1` only (not publicly exposed)
+- Gunicorn workers reduced to 2 (leaves headroom for the background worker)
+
+#### [`.env.prod`](file:///home/kishanravi/SatQuery_AI/.env.prod)
+Template for Oracle VM. Fill in: `POSTGRES_PASSWORD`, `SECRET_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY`, `ALLOWED_ORIGINS`, `NEXT_PUBLIC_API_URL`.
+
 ---
 
-## Approval Request
+### Oracle Cloud Deployment: Step-by-Step
 
-Please review this plan and confirm:
-1. **Order of implementation** — Any priority changes?
-2. **S3 Provider** — AWS S3, MinIO, GCS, Cloudflare R2, or other?
-3. **SSL Approach** — Let's Encrypt (auto), manual certs, or cloud provider (ACM, etc.)?
-4. **Auth Scope** — JWT only, or also API keys for service-to-service?
-5. **Timeline** — Start with Priority 1 (Alembic) immediately?
+#### Step 1 — Oracle Cloud Account (10 min)
+1. Go to [cloud.oracle.com](https://cloud.oracle.com) → **Start for free**
+2. Sign up with college/Gmail email
+3. Credit card for identity only — **₹0 charged**
+4. Home Region: **India (Hyderabad)**
 
-Once approved, I'll begin with **Priority 1: Alembic Migrations**.
+#### Step 2 — Create the Free VM (5 min)
+- Compute → Instances → Create Instance
+- Image: `Ubuntu 22.04`
+- Shape: **VM.Standard.A1.Flex** (Ampere ARM) → 4 OCPUs, 24 GB RAM
+- Upload your SSH public key
+- Note the **Public IP**
+
+#### Step 3 — Open Port 80 in Firewall (5 min)
+Oracle has two firewall layers — both must be opened:
+
+**Oracle Security List** (in the web console):
+- Networking → VCN → Security Lists → Default → Add Ingress Rule
+- TCP port `80` from `0.0.0.0/0`
+
+**OS firewall** (on the VM):
+```bash
+sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+#### Step 4 — Install Docker (5 min)
+```bash
+ssh -i ~/.ssh/your_key ubuntu@YOUR_VM_PUBLIC_IP
+
+curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
+sudo usermod -aG docker ubuntu && newgrp docker
+```
+
+#### Step 5 — Push Code & Clone on VM
+```bash
+# On your LOCAL machine first:
+cd /home/kishanravi/SatQuery_AI
+git add .
+git commit -m "deploy: oracle cloud MVP"
+git push origin master
+
+# Then on the Oracle VM:
+git clone https://github.com/YOUR_USERNAME/SatQuery_AI.git
+cd SatQuery_AI
+```
+
+#### Step 6 — Fill in `.env.prod`
+```bash
+cp .env.prod .env.prod.real
+nano .env.prod.real
+```
+
+Fill in:
+```
+POSTGRES_PASSWORD=StrongPassword123!
+DATABASE_URL=postgresql+asyncpg://satquery:StrongPassword123!@db:5432/satquery_db
+SECRET_KEY=<python3 -c "import secrets; print(secrets.token_hex(64))">
+ALLOWED_ORIGINS=http://YOUR_VM_PUBLIC_IP
+GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+NEXT_PUBLIC_API_URL=http://YOUR_VM_PUBLIC_IP/api/v1
+NEXT_PUBLIC_WS_URL=ws://YOUR_VM_PUBLIC_IP/api/v1
+```
+
+#### Step 7 — Build & Deploy
+```bash
+export DOCKER_BUILDKIT=1
+docker compose -f docker-compose.prod.yml --env-file .env.prod.real up -d --build
+```
+
+First build: ~8-12 minutes. ☕
+
+#### Step 8 — Seed Demo Data
+```bash
+docker exec satquery_api python scripts/seed_demo.py
+```
+
+#### Step 9 — Verify
+```bash
+curl http://YOUR_VM_PUBLIC_IP/health
+# → {"status":"ok","version":"0.1.0",...}
+```
+
+Open `http://YOUR_VM_PUBLIC_IP` in browser → **SatQuery AI is live.**
+
+---
+
+### Updating After Code Changes
+
+```bash
+# Local machine:
+git add . && git commit -m "fix: something" && git push
+
+# Oracle VM:
+cd SatQuery_AI
+git pull
+DOCKER_BUILDKIT=1 docker compose -f docker-compose.prod.yml --env-file .env.prod.real up -d --build
+# ~90 seconds — only the code layer rebuilds
+```
+
+---
+
+### Auto-Start on VM Reboot
+
+```bash
+crontab -e
+# Add:
+@reboot cd /home/ubuntu/SatQuery_AI && DOCKER_BUILDKIT=1 docker compose -f docker-compose.prod.yml --env-file .env.prod.real up -d
+```
+
+---
+
+### Cost Summary
+
+| Service | Platform | Cost |
+|:--------|:---------|:-----|
+| Frontend + Backend + DB + Redis + Worker | Oracle Cloud Free Tier VM | **₹0 forever** |
+| Object Storage | Local disk (200 GB on Oracle VM) | **₹0** |
+| **Total** | | **₹0** |

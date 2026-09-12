@@ -30,3 +30,6 @@ storage/*.db
 
 # OS
 .DS_Store
+
+# Oracle production env
+.env.prod

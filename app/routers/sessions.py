@@ -76,8 +76,10 @@ async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
             
     return SessionInfoResponse(
         session_id=session.session_id,
+        user_id=session.user_id,
         state=session.state,
         created_at=session.created_at,
+        updated_at=session.updated_at,
         query_count=query_count,
         referenced_asset_ids=list(referenced_assets),
         conversation_history=session.conversation_history

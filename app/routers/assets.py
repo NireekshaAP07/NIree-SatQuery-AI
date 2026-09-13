@@ -6,10 +6,11 @@ from typing import Optional
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status, Depends
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
+from app.core.config import get_settings
 from app.core.logger import get_logger
-from app.core.storage import get_storage
+from app.core.storage import S3StorageBackend, get_storage
 from app.middleware.security import validate_image_format, validate_upload_size
 from app.schemas.assets import AssetListResponse, AssetMetadataResponse, AssetUploadResponse, ImageModality
 from app.core.database import get_db
@@ -84,7 +85,11 @@ async def upload_asset(file: UploadFile = File(...), db: AsyncSession = Depends(
         modality=modality,
         crs=geo_meta.get("crs"),
         bbox=bbox_wkt,
-        acquisition_time=geo_meta.get("acquisition_time")
+        acquisition_time=geo_meta.get("acquisition_time"),
+        width=geo_meta.get("width"),
+        height=geo_meta.get("height"),
+        band_count=geo_meta.get("band_count"),
+        file_size_bytes=len(file_bytes),
     )
     
     db.add(asset)
@@ -116,24 +121,35 @@ async def upload_asset(file: UploadFile = File(...), db: AsyncSession = Depends(
     summary="Get metadata for a specific asset (FR-002)",
 )
 async def get_asset(asset_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ImageAsset).where(ImageAsset.asset_id == asset_id))
-    asset = result.scalars().first()
-    if not asset:
+    result = await db.execute(
+        select(
+            ImageAsset,
+            func.ST_XMin(ImageAsset.bbox).label("xmin"),
+            func.ST_YMin(ImageAsset.bbox).label("ymin"),
+            func.ST_XMax(ImageAsset.bbox).label("xmax"),
+            func.ST_YMax(ImageAsset.bbox).label("ymax")
+        )
+        .where(ImageAsset.asset_id == asset_id)
+    )
+    row = result.first()
+    if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Asset '{asset_id}' not found.")
     
-    # Normally we'd extract bbox coordinates from PostGIS, but for simplicity here we return basic schema
+    asset, xmin, ymin, xmax, ymax = row
+    bbox = [xmin, ymin, xmax, ymax] if xmin is not None else None
+
     return AssetMetadataResponse(
         asset_id=asset.asset_id,
-        filename=asset.uri.split('/')[-1],  # mock from URI
+        filename=asset.uri.split('/')[-1],
         modality=asset.modality,
-        file_size_bytes=0, # mock as we don't store it in db yet
+        file_size_bytes=asset.file_size_bytes or 0,
         storage_path=asset.uri,
         created_at=asset.created_at,
         crs=asset.crs,
-        bbox=None, # To parse PostGIS we'd need func.ST_AsGeoJSON etc. Mocking for now.
-        width=0,
-        height=0,
-        band_count=0,
+        bbox=bbox,
+        width=asset.width,
+        height=asset.height,
+        band_count=asset.band_count,
         acquisition_time=asset.acquisition_time
     )
 
@@ -144,26 +160,36 @@ async def get_asset(asset_id: str, db: AsyncSession = Depends(get_db)):
     summary="List all ingested assets",
 )
 async def list_assets(skip: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ImageAsset).offset(skip).limit(limit))
-    assets = result.scalars().all()
+    result = await db.execute(
+        select(
+            ImageAsset,
+            func.ST_XMin(ImageAsset.bbox).label("xmin"),
+            func.ST_YMin(ImageAsset.bbox).label("ymin"),
+            func.ST_XMax(ImageAsset.bbox).label("xmax"),
+            func.ST_YMax(ImageAsset.bbox).label("ymax")
+        )
+        .offset(skip).limit(limit)
+    )
+    rows = result.all()
     
     count_result = await db.execute(select(ImageAsset)) # Simplified count for MVP
     total = len(count_result.scalars().all())
 
     items = []
-    for asset in assets:
+    for asset, xmin, ymin, xmax, ymax in rows:
+        bbox = [xmin, ymin, xmax, ymax] if xmin is not None else None
         items.append(AssetMetadataResponse(
             asset_id=asset.asset_id,
             filename=asset.uri.split('/')[-1],
             modality=asset.modality,
-            file_size_bytes=0,
+            file_size_bytes=asset.file_size_bytes or 0,
             storage_path=asset.uri,
             created_at=asset.created_at,
             crs=asset.crs,
-            bbox=None,
-            width=0,
-            height=0,
-            band_count=0,
+            bbox=bbox,
+            width=asset.width,
+            height=asset.height,
+            band_count=asset.band_count,
             acquisition_time=asset.acquisition_time
         ))
         
@@ -201,38 +227,58 @@ async def get_asset_preview(
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Asset '{asset_id}' not found.")
 
-    source = Path(asset.uri)
-    if not source.exists():
+    storage = get_storage()
+    if not storage.exists(asset.uri):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Asset '{asset_id}' is registered but its file is missing from storage.",
         )
 
-    storage = get_storage()
-    cache_path = Path(storage.root) / "derived" / f"{asset_id}_{max_dimension}.png"
+    settings = get_settings()
+    derived_dir = Path(settings.storage_local_root) / "derived"
+    derived_dir.mkdir(parents=True, exist_ok=True)
+    cache_filename = f"{asset_id}_{max_dimension}.png"
+    cache_path = derived_dir / cache_filename
 
-    cache_is_fresh = (
-        cache_path.exists()
-        and cache_path.stat().st_mtime >= source.stat().st_mtime
-    )
+    # If already cached locally, serve immediately
+    if not cache_path.exists():
+        # Check if preview was already computed and cached in S3
+        s3_key = f"derived/{cache_filename}"
+        if isinstance(storage, S3StorageBackend) and storage.exists(s3_key):
+            storage.download_file(s3_key, cache_path)
+        else:
+            from app.geospatial.preview_generator import generate_rgb_preview
 
-    if not cache_is_fresh:
-        from app.geospatial.preview_generator import generate_rgb_preview
+            # Ensure we have local file access for rasterio
+            if isinstance(storage, S3StorageBackend) or asset.uri.startswith("s3://"):
+                tmp_dir = Path(settings.storage_local_root) / "tmp"
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+                ext = Path(asset.uri).suffix or ".tif"
+                local_source = tmp_dir / f"{asset_id}{ext}"
+                if not local_source.exists():
+                    storage.download_file(asset.uri, local_source)
+            else:
+                local_source = storage.get_path(asset.uri)
 
-        try:
-            generate_rgb_preview(source, cache_path, max_dimension=max_dimension)
-        except Exception as exc:
-            logger.warning("preview_generation_failed", asset_id=asset_id, error=str(exc))
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Could not render a preview for '{asset_id}': {exc}",
-            )
+            try:
+                generate_rgb_preview(local_source, cache_path, max_dimension=max_dimension)
+            except Exception as exc:
+                logger.warning("preview_generation_failed", asset_id=asset_id, error=str(exc))
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Could not render a preview for '{asset_id}': {exc}",
+                )
+
+            # Persist to S3 if distributed backend is active
+            if isinstance(storage, S3StorageBackend):
+                try:
+                    storage.save_derived(cache_path.read_bytes(), cache_filename)
+                except Exception as exc:
+                    logger.warning("preview_s3_upload_failed", asset_id=asset_id, error=str(exc))
 
     return FileResponse(
         cache_path,
         media_type="image/png",
-        # Renditions are content-addressed by (asset_id, max_dimension) and the
-        # source is immutable once uploaded, so this is safe to cache hard.
         headers={"Cache-Control": "public, max-age=86400"},
     )
 
@@ -257,3 +303,22 @@ async def delete_asset(asset_id: str, db: AsyncSession = Depends(get_db)):
     await db.delete(asset)
     await db.commit()
     logger.info("asset_deleted", asset_id=asset_id)
+
+
+@router.post(
+    "/demo/seed",
+    status_code=status.HTTP_200_OK,
+    summary="Seed the database and storage with example data",
+)
+async def seed_demo_data():
+    import sys
+    from pathlib import Path
+    # Ensure project root is in path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    try:
+        from scripts.seed_demo import seed
+        await seed(dry_run=False, force=True)
+        return {"status": "success", "message": "Real satellite example data loaded successfully."}
+    except Exception as exc:
+        logger.error("demo_seed_failed", error=str(exc))
+        raise HTTPException(status_code=500, detail=f"Failed to seed example data: {exc}")

@@ -1,0 +1,78 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache
+.coverage
+.tox
+.mypy_cache
+.hypothesis
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data directories (mounted as volumes)
+data/
+satquery_backend/storage/
+satquery_backend/data/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Test
+htmlcov/
+.coverage.*
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/*.log
+
+# Documentation
+*.md
+!README.md
+
+# Secrets and configs (should be in .env, not in image)
+*.env
+*.env.local
+*.env.production
+config/*.yaml
+config/*.yml

@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import QueryDemo from "./QueryDemo";
 import SceneHUD from "./SceneHUD";
 import ThemeControls from "./ThemeControls";
 import { useHeroExitNavigation } from "@/hooks/useHeroTransition";
 import { HERO_EXIT_MS } from "@/lib/heroExit";
+import { apiFetch } from "@/lib/api/client";
 
 /** Doors into the analysis app. The hero is the landing page; these are
  *  how a visitor actually gets to the tool. */
@@ -32,6 +34,30 @@ function isPlainClick(event: React.MouseEvent) {
 
 export default function HeroOverlay() {
   const { exitTo, isExiting } = useHeroExitNavigation();
+  const [seeding, setSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
+
+  /**
+   * Seeds the demo project on the backend, then drops the visitor straight
+   * into the comparison screen looking at it. This is the "show me, don't
+   * make me set it up" door — it exists because a first-time visitor has no
+   * imagery of their own to ask questions about yet.
+   */
+  async function loadExampleProject() {
+    setSeeding(true);
+    setSeedError(null);
+    try {
+      await apiFetch("/assets/demo/seed", { method: "POST" });
+      exitTo("/compare");
+    } catch (error) {
+      // Inline rather than alert(): the hero is the first thing anyone sees
+      // and a modal dialog on a failed fetch is a bad first impression.
+      setSeedError(
+        error instanceof Error ? error.message : "Could not load the example.",
+      );
+      setSeeding(false);
+    }
+  }
 
   return (
     <div
@@ -93,25 +119,54 @@ export default function HeroOverlay() {
           ))}
         </nav>
 
-        {/* The pill, in our own accent rather than the reference's violet:
-            filled, so it reads as the one action on the bar. */}
-        <a
-          href="/analyze"
-          onClick={(event) => {
-            if (!isPlainClick(event)) return;
-            event.preventDefault();
-            exitTo("/analyze");
-          }}
-          className="pointer-events-auto cursor-pointer justify-self-end rounded-full px-5 py-2.5 text-[13px] font-medium transition-[filter,transform] duration-200 hover:brightness-110 active:scale-[0.98]"
-          style={{
-            fontFamily: "var(--font-grotesk-display)",
-            background:
-              "linear-gradient(120deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent-warm)))",
-            color: "var(--background)",
-          }}
-        >
-          Open workspace
-        </a>
+        {/* Two actions, ghost then filled: the example is the low-commitment
+            look, the workspace is the real one. */}
+        <div className="flex items-center gap-2 justify-self-end">
+          <button
+            type="button"
+            onClick={loadExampleProject}
+            disabled={seeding}
+            title="Load real MODIS Terra imagery of Bengaluru East — 2019 against 2024 urban expansion"
+            className="pointer-events-auto hidden cursor-pointer rounded-full border px-4 py-2 text-[13px] transition-colors duration-200 disabled:cursor-wait disabled:opacity-70 sm:block"
+            style={{
+              fontFamily: "var(--font-grotesk-display)",
+              borderColor: "var(--control-border)",
+              background: "var(--control-bg)",
+              color: "var(--ink-muted)",
+            }}
+          >
+            {seeding ? "Loading…" : "Load example"}
+          </button>
+
+          <a
+            href="/analyze"
+            onClick={(event) => {
+              if (!isPlainClick(event)) return;
+              event.preventDefault();
+              exitTo("/analyze");
+            }}
+            className="pointer-events-auto cursor-pointer rounded-full px-5 py-2.5 text-[13px] font-medium transition-[filter,transform] duration-200 hover:brightness-110 active:scale-[0.98]"
+            style={{
+              fontFamily: "var(--font-grotesk-display)",
+              background:
+                "linear-gradient(120deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent-warm)))",
+              color: "var(--background)",
+            }}
+          >
+            Open workspace
+          </a>
+        </div>
+
+        {/* Failure from the seed call, parked under the bar so it never
+            shifts the layout of the bar itself. */}
+        {seedError && (
+          <p
+            className="col-span-3 mt-2 text-right font-mono text-[10px]"
+            style={{ color: "var(--accent-warm)" }}
+          >
+            {seedError}
+          </p>
+        )}
       </header>
 
       {/*

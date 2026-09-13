@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.core.database import init_db, check_db_connection
+from app.core.database import check_db_connection
 from app.core.logger import get_logger, setup_logging
 from app.core.redis_client import close_redis_pool, get_redis_client, check_redis_connection
 from app.middleware.security import SecurityMiddleware
@@ -28,10 +28,7 @@ async def lifespan(app: FastAPI):
     await redis.ping()
     logger.info("redis_connected", url=settings.redis_url)
 
-    # Initialize DB tables (dev only; use Alembic in production)
-    if settings.app_env == "development":
-        await init_db()
-        logger.info("db_tables_initialized")
+    # Schema is managed by Alembic (migrate service runs alembic upgrade head at startup).
 
     yield
 
@@ -50,12 +47,19 @@ app = FastAPI(
 )
 
 # ── CORS ───────────────────────────────────────────────────────────────────────
+_cors_methods = ["GET", "POST", "DELETE", "OPTIONS"] if settings.app_env == "production" else ["*"]
+_cors_headers = (
+    ["Authorization", "Content-Type", "X-Request-ID"]
+    if settings.app_env == "production"
+    else ["*"]
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_cors_methods,
+    allow_headers=_cors_headers,
 )
 
 # ── Security middleware ────────────────────────────────────────────────────────

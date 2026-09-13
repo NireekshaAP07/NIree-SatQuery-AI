@@ -59,6 +59,20 @@ def run(state: AgentState) -> dict[str, Any]:
     if not before_path or not after_path:
         return {"status": "error", "error": "One or both asset paths not found.", "findings": []}
 
+    # Graceful fallback: if files are remote URIs or do not exist on disk
+    for label, path in (("before", before_path), ("after", after_path)):
+        if not Path(str(path)).is_file():
+            logger.warning("change_agent_asset_not_on_disk", label=label, path=path)
+            return {
+                "status": "error",
+                "error": (
+                    f"Asset file ({label}) is not available on local disk (path: {path}). "
+                    "Upload real raster files to run change detection."
+                ),
+                "findings": [],
+            }
+
+
     try:
         # ── 1. Import geospatial & AI modules ────────────────────────────────
         from app.geospatial.raster_handler import extract_raster_metadata

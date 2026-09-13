@@ -42,12 +42,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def init_db() -> None:
-    """Creates all tables on startup (dev only; use Alembic migrations in production)."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
 async def check_db_connection() -> bool:
     """Pings the database to check connection health."""
     try:

@@ -19,15 +19,21 @@ class SessionCreateResponse(BaseModel):
     user_id: Optional[str] = None
     state: SessionState = SessionState.active
     created_at: datetime
+    query_count: int = 0
+    referenced_asset_ids: list[str] = Field(default_factory=list)
+    conversation_history: list[Any] = Field(default_factory=list)
     message: str = "Session created."
 
 
 class SessionInfoResponse(BaseModel):
     session_id: str
+    user_id: Optional[str] = None
     state: SessionState
     created_at: datetime
+    updated_at: Optional[datetime] = None
     query_count: int
     referenced_asset_ids: list[str]
+    conversation_history: list[Any] = Field(default_factory=list)
 
 
 class QueryRequest(BaseModel):
@@ -45,7 +51,10 @@ class QuerySubmitResponse(BaseModel):
 class QueryStatusResponse(BaseModel):
     query_id: str
     session_id: str
+    text: Optional[str] = None
+    asset_ids: list[str] = Field(default_factory=list)
     status: str
     result: Optional[Any] = None
     trace: Optional[list[dict]] = None
     error: Optional[str] = None
+    created_at: Optional[datetime] = None

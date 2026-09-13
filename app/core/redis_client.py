@@ -15,6 +15,8 @@ def get_redis_pool() -> aioredis.ConnectionPool:
             settings.redis_url,
             max_connections=50,
             decode_responses=True,
+            socket_timeout=None,
+            socket_connect_timeout=5,
         )
     return _pool
 

@@ -1,5 +1,7 @@
 import asyncio
 import json
+import tempfile
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,6 +10,7 @@ from app.agents.orchestrator import run_pipeline
 from app.core.database import AsyncSessionLocal
 from app.core.logger import get_logger
 from app.core.redis_client import get_redis_client
+from app.core.storage import get_storage
 from app.models.analysis_run import AnalysisRun
 from app.models.finding import Finding
 from app.models.query import Query
@@ -41,15 +44,41 @@ async def process_query(query_id: str, session_id: str) -> None:
         # Publish trace update to WebSocket
         await redis.publish(f"satquery:traces:{session_id}", json.dumps({"step": "worker_started", "query_id": query_id}))
         
-        # Retrieve asset paths
+        # Retrieve and resolve asset paths
+        # When storage backend is S3, assets have s3:// URIs. rasterio (and all
+        # specialist agents) require local filesystem paths, so we download any
+        # remote assets to a temp directory before passing them to the pipeline.
         asset_ids = query_record.referenced_assets
         asset_paths = {}
+        tmp_dir = None
+        storage = get_storage()
+
         for aid in asset_ids:
             asset_res = await db.execute(select(ImageAsset).where(ImageAsset.asset_id == aid))
             asset = asset_res.scalars().first()
-            if asset:
-                asset_paths[aid] = asset.uri
-                
+            if not asset:
+                continue
+
+            uri = asset.uri
+            if uri.startswith("s3://"):
+                # Download S3 object to a local temp file for this pipeline run
+                if tmp_dir is None:
+                    tmp_dir = Path(tempfile.mkdtemp(prefix="satquery_worker_"))
+                suffix = Path(uri.split("/")[-1]).suffix or ".tif"
+                local_path = tmp_dir / f"{aid}{suffix}"
+                try:
+                    storage.download_file(uri, local_path)
+                    asset_paths[aid] = str(local_path)
+                    logger.info("s3_asset_cached_locally", asset_id=aid, local_path=str(local_path))
+                except Exception as dl_exc:
+                    logger.error("s3_asset_download_failed", asset_id=aid, error=str(dl_exc))
+                    asset_paths[aid] = uri  # Fall back; agent will fail gracefully
+            else:
+                try:
+                    asset_paths[aid] = str(storage.get_path(uri))
+                except Exception:
+                    asset_paths[aid] = uri
+
         # Retrieve Session to get conversation history
         session_res = await db.execute(select(Session).where(Session.session_id == session_id))
         session_record = session_res.scalars().first()
@@ -93,9 +122,13 @@ async def process_query(query_id: str, session_id: str) -> None:
                     evidence=report_data["evidence"]
                 )
                     
-            query_record.status = "failed" if final_state.get("error") else "completed"
+            query_record.status = "failed" if (final_state.get("error") not in (None, "", 0, False)) else "completed"
             query_record.trace = final_state.get("trace")
+            error_val = final_state.get("error")
             query_record.result = {"run_id": run_id}
+            if error_val not in (None, "", 0, False):
+                query_record.error = str(error_val)
+
             
             # Update session conversational history
             if session_record:
@@ -117,6 +150,14 @@ async def process_query(query_id: str, session_id: str) -> None:
             await db.commit()
             await redis.publish(f"satquery:traces:{session_id}", json.dumps({"step": "worker_failed", "query_id": query_id, "error": str(exc)}))
 
+        finally:
+            # Clean up any locally cached S3 assets from the temp directory
+            if tmp_dir and tmp_dir.exists():
+                import shutil
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                logger.info("tmp_assets_cleaned", tmp_dir=str(tmp_dir))
+
+
 
 async def worker_loop() -> None:
     """Continuously polls the Redis queue for new queries."""
@@ -125,7 +166,7 @@ async def worker_loop() -> None:
     while True:
         try:
             # brpop blocks until an item is available
-            result = await redis.brpop("satquery:query_queue", timeout=5)
+            result = await redis.brpop("satquery:query_queue", timeout=2)
             if result:
                 _, message = result
                 data = json.loads(message)

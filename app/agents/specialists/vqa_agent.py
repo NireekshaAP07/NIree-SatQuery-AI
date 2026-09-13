@@ -50,6 +50,23 @@ def run(state: AgentState) -> dict[str, Any]:
     if not primary_path:
         return {"status": "error", "error": f"Asset path not found for {asset_ids[0]}.", "findings": []}
 
+    # If path is a remote URI (s3://, local://) and no local file exists, fail gracefully
+    if not Path(str(primary_path)).is_file() and (
+        str(primary_path).startswith("s3://")
+        or str(primary_path).startswith("local://")
+        or not Path(str(primary_path)).exists()
+    ):
+        logger.warning("vqa_asset_not_on_disk", path=primary_path)
+        return {
+            "status": "error",
+            "error": (
+                f"Asset file is not available on local disk (path: {primary_path}). "
+                "Upload a real raster file to run analysis."
+            ),
+            "findings": [],
+        }
+
+
     try:
         # ── 1. Import geospatial & AI modules ────────────────────────────────
         from app.geospatial.raster_handler import extract_raster_metadata

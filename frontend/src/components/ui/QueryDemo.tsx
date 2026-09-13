@@ -13,6 +13,7 @@ import { palette } from "@/lib/theme";
 /** Placeholder hints — places, not questions, since typing a place is what
  *  now flies the globe there. */
 const PLACE_HINTS = [
+  "Bengaluru",
   "Mumbai",
   "Paris",
   "Amazon Rainforest",
@@ -22,7 +23,10 @@ const PLACE_HINTS = [
 ];
 
 /** Used only for the on-globe demo when the box is submitted empty. */
-const DEMO_QUERY = "What changed in this region between 2022 and 2026?";
+/* Phrased against the imagery the demo seed actually loads — MODIS Terra
+   over Bengaluru East, 2019 against 2024 — so an empty submit demonstrates
+   a question the backend can really answer rather than a generic one. */
+const DEMO_QUERY = "What changed in Bengaluru between 2019 and 2024?";
 
 export default function QueryDemo() {
   const [value, setValue] = useState("");

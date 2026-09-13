@@ -76,12 +76,13 @@ export default function ComparePage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1.5">
-        <Eyebrow>Bi-temporal observation</Eyebrow>
+        <Eyebrow>Bi-temporal observation · MODIS Terra 250m</Eyebrow>
         <h1 className="font-[family-name:var(--font-serif-display)] text-[2rem] leading-tight text-[var(--ink-primary)]">
           Temporal Comparison
         </h1>
         <p className="max-w-2xl text-sm leading-relaxed text-[var(--ink-muted)]">
-          Compare aligned observations, inspect highlighted regions, and verify
+          Compare real satellite observations (NASA MODIS Terra) of Bengaluru East — Whitefield and Sarjapur
+          corridors — to see urban expansion from 2019 to 2024. Inspect highlighted change regions and verify
           where the landscape changed.
         </p>
       </div>
@@ -149,83 +150,88 @@ export default function ComparePage() {
             }
           />
 
-          <Panel>
-            <AgentActivity
-              trace={analysis.trace}
-              phase={analysis.phase}
-              liveTrace={analysis.liveTrace}
-            />
+          <Panel className="h-fit">
+            <PanelTitle
+              trailing={
+                analysis.phase === "completed" ? (
+                  <Pill tone="ok">Validated</Pill>
+                ) : null
+              }
+            >
+              Change Detection Results
+            </PanelTitle>
+
+            {analysis.phase === "idle" ? (
+              <p className="text-sm leading-relaxed text-[var(--ink-muted)]">
+                Ask what changed between these two observations. Detected regions
+                are outlined on the later frame.
+              </p>
+            ) : analysis.phase === "failed" ? (
+              <ErrorNotice>
+                {analysis.error ?? "Change detection failed."}
+              </ErrorNotice>
+            ) : analysis.isBusy ? (
+              <p className="text-sm text-[var(--ink-muted)]">
+                Aligning observations and running change detection…
+              </p>
+            ) : analysis.findings.length === 0 ? (
+              <p className="text-sm leading-relaxed text-[var(--ink-muted)]">
+                The workflow completed without returning change regions.
+                {analysis.result?.error ? ` ${analysis.result.error}` : ""}
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {changeClasses.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {Array.from(new Set(changeClasses)).map((cls) => (
+                      <Pill key={cls} tone="active">
+                        {cls}
+                      </Pill>
+                    ))}
+                  </div>
+                ) : null}
+
+                <ul className="space-y-3">
+                  {analysis.findings.map((finding, index) => (
+                    <li key={finding.finding_id}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveFindingId(finding.finding_id)}
+                        className={cx(
+                          "flex w-full flex-col gap-2 rounded-md border px-3 py-2 text-left transition-colors",
+                          finding.finding_id === activeFindingId
+                            ? "border-[var(--brand-rule)] bg-[var(--brand-rule-soft)]"
+                            : "border-[var(--rule-hairline)] hover:border-[var(--rule-strong)]",
+                        )}
+                      >
+                        <div className="flex w-full items-center justify-between gap-3">
+                          <span className="min-w-0 font-medium text-sm text-[var(--ink-primary)]">
+                            {finding.label ?? `Change region ${index + 1}`}
+                          </span>
+                          <span className="shrink-0 font-[family-name:var(--font-geist-mono)] text-xs text-[var(--ink-muted)]">
+                            {(finding.confidence * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        {finding.answer && (
+                          <p className="text-sm text-[var(--ink-muted)] leading-relaxed">
+                            {finding.answer}
+                          </p>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Panel>
         </div>
 
         <Panel className="h-fit">
-          <PanelTitle
-            trailing={
-              analysis.phase === "completed" ? (
-                <Pill tone="ok">Validated</Pill>
-              ) : null
-            }
-          >
-            Change Detection Results
-          </PanelTitle>
-
-          {analysis.phase === "idle" ? (
-            <p className="text-sm leading-relaxed text-[var(--ink-muted)]">
-              Ask what changed between these two observations. Detected regions
-              are outlined on the later frame.
-            </p>
-          ) : analysis.phase === "failed" ? (
-            <ErrorNotice>
-              {analysis.error ?? "Change detection failed."}
-            </ErrorNotice>
-          ) : analysis.isBusy ? (
-            <p className="text-sm text-[var(--ink-muted)]">
-              Aligning observations and running change detection…
-            </p>
-          ) : analysis.findings.length === 0 ? (
-            <p className="text-sm leading-relaxed text-[var(--ink-muted)]">
-              The workflow completed without returning change regions.
-              {analysis.result?.error ? ` ${analysis.result.error}` : ""}
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {changeClasses.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {Array.from(new Set(changeClasses)).map((cls) => (
-                    <Pill key={cls} tone="active">
-                      {cls}
-                    </Pill>
-                  ))}
-                </div>
-              ) : null}
-
-              <ul className="space-y-1.5">
-                {analysis.findings.map((finding, index) => (
-                  <li key={finding.finding_id}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveFindingId(finding.finding_id)}
-                      className={cx(
-                        "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition-colors",
-                        finding.finding_id === activeFindingId
-                          ? "border-[var(--brand-rule)] bg-[var(--brand-rule-soft)]"
-                          : "border-[var(--rule-hairline)] hover:border-[var(--rule-strong)]",
-                      )}
-                    >
-                      <span className="min-w-0 truncate text-sm text-[var(--ink-primary)]">
-                        {finding.label ??
-                          finding.answer ??
-                          `Change region ${index + 1}`}
-                      </span>
-                      <span className="shrink-0 font-[family-name:var(--font-geist-mono)] text-xs text-[var(--ink-muted)]">
-                        {(finding.confidence * 100).toFixed(0)}%
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <AgentActivity
+            trace={analysis.trace}
+            phase={analysis.phase}
+            liveTrace={analysis.liveTrace}
+          />
         </Panel>
       </div>
         </>

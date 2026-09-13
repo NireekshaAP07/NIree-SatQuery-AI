@@ -1,0 +1,38 @@
+{
+  "report_id": "demo0000000000000000000000000008",
+  "run_id": "demo0000000000000000000000000006",
+  "summary": "Bi-temporal analysis of the study area (Bangalore region) between 2022 and 2026 reveals significant anthropogenic changes. Urban expansion dominates the north-eastern quadrant with 12% increase in built-up area. Concurrent vegetation loss of approximately 8% observed in south-eastern zones, consistent with land-use conversion for development.",
+  "evidence": [
+    {
+      "type": "image",
+      "label": "Optical 2026",
+      "asset_id": "demo0000000000000000000000000002"
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "645d70297b444b1393d1a1d2ddedaefa",
+      "label": "Urban Expansion",
+      "answer": "Significant new construction detected in north-eastern sector between 2022 and 2026.",
+      "confidence": 0.94,
+      "properties": {
+        "workflow": "change_detection",
+        "after_state": "Dense residential blocks",
+        "change_type": "Urban Expansion",
+        "before_state": "Open agricultural land"
+      }
+    },
+    {
+      "finding_id": "075f6e65c9e640cd9d106649d05662b5",
+      "label": "Vegetation Loss",
+      "answer": "Vegetative cover has been cleared in the south-eastern sector.",
+      "confidence": 0.88,
+      "properties": {
+        "workflow": "change_detection",
+        "after_state": "Bare soil / cleared terrain",
+        "change_type": "Vegetation Loss",
+        "before_state": "Dense tree canopy"
+      }
+    }
+  ]
+}

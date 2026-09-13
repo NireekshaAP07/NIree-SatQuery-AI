@@ -1,0 +1,41 @@
+{
+    "chunk_compression": null,
+    "dtype": "uint16",
+    "hidden": false,
+    "htype": "image",
+    "is_link": false,
+    "is_sequence": false,
+    "length": 40,
+    "links": {
+        "_data_id": {
+            "append": "append_id",
+            "flatten_sequence": false
+        },
+        "_data_info": {
+            "append": "append_info",
+            "flatten_sequence": true,
+            "update": "update_info"
+        },
+        "_data_shape": {
+            "append": "append_shape",
+            "flatten_sequence": true,
+            "update": "append_shape"
+        }
+    },
+    "max_chunk_size": null,
+    "max_shape": [
+        3,
+        120,
+        120
+    ],
+    "min_shape": [
+        3,
+        120,
+        120
+    ],
+    "name": "data",
+    "sample_compression": "lz4",
+    "tiling_threshold": null,
+    "verify": false,
+    "version": "2.6.0"
+}

@@ -1,0 +1,36 @@
+{
+    "default_index": [
+        {
+            "start": null,
+            "step": null,
+            "stop": null
+        }
+    ],
+    "groups": [],
+    "hidden_tensors": [
+        "_data_info",
+        "_data_shape",
+        "_data_id",
+        "_labels_shape",
+        "_labels_id"
+    ],
+    "tensor_names": {
+        "_data_id": "_data_id",
+        "_data_info": "_data_info",
+        "_data_shape": "_data_shape",
+        "_labels_id": "_labels_id",
+        "_labels_shape": "_labels_shape",
+        "data": "data",
+        "labels": "labels"
+    },
+    "tensors": [
+        "data",
+        "_data_info",
+        "_data_shape",
+        "_data_id",
+        "labels",
+        "_labels_shape",
+        "_labels_id"
+    ],
+    "version": "2.6.0"
+}

@@ -39,9 +39,9 @@ langchain-openai>=0.2.3   # GPT-4o orchestrator (best production LLM)
 # ─────────────────────────────────────────────────────────────────────────────
 torch
 torchvision
-transformers==4.45.2
-accelerate==0.34.2
-sentencepiece==0.2.0
+transformers>=4.45.2
+accelerate>=0.34.2
+sentencepiece>=0.2.0
 
 # Computer Vision
 opencv-python-headless==4.10.0.84
@@ -72,3 +72,11 @@ passlib[bcrypt]==1.7.4
 
 # Reports & Export
 fpdf2==2.8.1
+
+# VLM Fine-Tuning Dependencies (BigEarthNet / PaliGemma / QLoRA)
+peft>=0.10.0
+trl>=0.8.0
+datasets>=2.18.0
+gdown>=5.1.0
+bitsandbytes>=0.43.0
+

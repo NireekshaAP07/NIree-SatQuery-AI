@@ -53,7 +53,7 @@ export default function ThemeControls() {
   return (
     <div
       ref={containerRef}
-      className="pointer-events-auto absolute right-4 top-16 z-20 flex w-[172px] flex-col gap-2 sm:right-6 sm:top-20"
+      className="pointer-events-auto fixed right-4 top-20 z-20 flex w-[172px] flex-col gap-2 sm:right-6 sm:top-24"
     >
       <button
         onClick={toggleMode}

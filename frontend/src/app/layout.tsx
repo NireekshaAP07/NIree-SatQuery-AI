@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Instrument_Serif } from "next/font/google";
+import { Instrument_Serif, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
 import SpaceBackdrop from "@/components/app/SpaceBackdrop";
@@ -26,6 +26,20 @@ const display = Instrument_Serif({
   variable: "--font-display",
 });
 
+/**
+ * The masthead face. A geometric grotesque with a tall x-height, set very
+ * large and tight — it is what carries the centred hero, while the serif
+ * above stays available for editorial moments.
+ *
+ * Variable weight, so 500/700 cost nothing extra over 400: one file covers
+ * the whole range instead of a request per cut.
+ */
+const sans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-sans-display",
+});
+
 export const metadata: Metadata = {
   title: "SatQuery — Ask satellite imagery anything",
   description:
@@ -38,7 +52,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`h-full antialiased ${display.variable}`}>
+    <html
+      lang="en"
+      className={`h-full antialiased ${display.variable} ${sans.variable}`}
+    >
       <body className="h-full">
         {/* Both live in the root layout so they persist across navigation:
             the theme must be applied before any route paints, and the sky

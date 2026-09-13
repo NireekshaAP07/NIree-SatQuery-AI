@@ -1,19 +1,14 @@
 "use client";
 
+import Link from "next/link";
+import { useState } from "react";
+
 import QueryDemo from "./QueryDemo";
 import SceneHUD from "./SceneHUD";
 import ThemeControls from "./ThemeControls";
 import { useHeroExitNavigation } from "@/hooks/useHeroTransition";
 import { HERO_EXIT_MS } from "@/lib/heroExit";
-import { palette } from "@/lib/theme";
 import { apiFetch } from "@/lib/api/client";
-
-const CAPABILITIES = [
-  "Visual QA",
-  "Text-guided grounding",
-  "Bi-temporal change",
-  "Optical + SAR",
-];
 
 /** Doors into the analysis app. The hero is the landing page; these are
  *  how a visitor actually gets to the tool. */
@@ -24,12 +19,49 @@ const WORKSPACE_LINKS = [
   { href: "/reports", label: "Reports" },
 ];
 
+/** A plain left-click is ours to animate; every other kind of click is the
+ *  browser's. Keeping the real href means Cmd-click, middle-click and "open
+ *  in new tab" all still do what they should, and the page degrades to
+ *  ordinary navigation with no JS at all. */
+function isPlainClick(event: React.MouseEvent) {
+  return !(
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.button !== 0
+  );
+}
+
 export default function HeroOverlay() {
   const { exitTo, isExiting } = useHeroExitNavigation();
+  const [seeding, setSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
+
+  /**
+   * Seeds the demo project on the backend, then drops the visitor straight
+   * into the comparison screen looking at it. This is the "show me, don't
+   * make me set it up" door — it exists because a first-time visitor has no
+   * imagery of their own to ask questions about yet.
+   */
+  async function loadExampleProject() {
+    setSeeding(true);
+    setSeedError(null);
+    try {
+      await apiFetch("/assets/demo/seed", { method: "POST" });
+      exitTo("/compare");
+    } catch (error) {
+      // Inline rather than alert(): the hero is the first thing anyone sees
+      // and a modal dialog on a failed fetch is a bad first impression.
+      setSeedError(
+        error instanceof Error ? error.message : "Could not load the example.",
+      );
+      setSeeding(false);
+    }
+  }
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-10 flex flex-col"
+      className="pointer-events-none relative z-10"
       style={{
         // The chrome clears out early, so the last thing on screen is the
         // planet leaving rather than text hanging over an empty sky.
@@ -37,213 +69,184 @@ export default function HeroOverlay() {
         transition: `opacity ${Math.round(HERO_EXIT_MS * 0.45)}ms ease-out`,
       }}
     >
-      {/* top bar */}
-      <header className="flex items-center justify-between px-6 py-5 sm:px-10">
-        <div className="pointer-events-auto flex items-center gap-2.5">
-          <div
-            className="grid h-7 w-7 place-items-center rounded-md border"
-            style={{
-              borderColor: "rgba(61,219,224,0.45)",
-              background: "rgba(61,219,224,0.1)",
-            }}
-          >
-            <div
-              className="h-2 w-2 rounded-full"
-              style={{ background: palette.cyan, boxShadow: `0 0 10px ${palette.cyan}` }}
-            />
-          </div>
-          <span
-            className="font-mono text-xs tracking-[0.22em]"
-            style={{ color: "var(--ink-primary)" }}
-          >
-            SATQUERY<span style={{ color: "var(--accent)" }}>·AI</span>
-          </span>
-        </div>
+      {/*
+        Masthead: wordmark left, sections centred, the way into the app on
+        the right. Fixed rather than scrolled away, so the door out of the
+        landing page is reachable from any point in it.
 
-        <div className="flex items-center gap-5">
-          <nav className="pointer-events-auto flex items-center gap-1">
-            {/* Section links need room; the CTA below never hides, so there
-                is always a way into the app at any width. */}
-            <span className="hidden items-center gap-1 md:flex">
-              {WORKSPACE_LINKS.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  onClick={(event) => {
-                    // Keep the real href so the link is still a link —
-                    // middle-click, ⌘-click and "open in new tab" all work,
-                    // and it degrades to a plain navigation without JS.
-                    // Only a plain left-click gets the animation.
-                    if (
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.shiftKey ||
-                      event.button !== 0
-                    ) {
-                      return;
-                    }
-                    event.preventDefault();
-                    exitTo(item.href);
-                  }}
-                  className="cursor-pointer rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]"
-                  style={{ color: "var(--ink-muted)" }}
-                >
-                  {item.label}
-                </a>
-              ))}
-            </span>
-
-            {/* The primary call to action: the hero sells the idea, this is
-                where a visitor goes to actually run one. */}
-            <button
-              onClick={async (event) => {
-                const btn = event.currentTarget;
-                const originalText = btn.textContent;
-                btn.disabled = true;
-                btn.textContent = "Loading...";
-                try {
-                  await apiFetch("/assets/demo/seed", { method: "POST" });
-                  exitTo("/compare");
-                } catch (e: any) {
-                  alert(e.message || "Failed to load example project.");
-                  btn.disabled = false;
-                  btn.textContent = originalText;
-                }
-              }}
-              title="Load real MODIS Terra satellite imagery of Bengaluru East — compare 2019 vs 2024 urban expansion"
-              className="ml-2 cursor-pointer rounded-lg border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-all duration-200 hover:brightness-125"
-              style={{
-                borderColor: "rgba(184,99,26,0.4)",
-                background: "rgba(184,99,26,0.14)",
-                color: "var(--accent-warm)",
-              }}
-            >
-              Load Example Project
-            </button>
-            <a
-              href="/analyze"
-              onClick={(event) => {
-                if (
-                  event.metaKey ||
-                  event.ctrlKey ||
-                  event.shiftKey ||
-                  event.button !== 0
-                ) {
-                  return;
-                }
-                event.preventDefault();
-                exitTo("/analyze");
-              }}
-              className="ml-2 cursor-pointer rounded-lg border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-all duration-200 hover:brightness-125"
-              style={{
-                borderColor: "rgba(61,219,224,0.4)",
-                background: "rgba(61,219,224,0.14)",
-                color: "var(--accent)",
-              }}
-            >
-              Open workspace →
-            </a>
-          </nav>
-
-          {/* Drops out once the nav needs the room — the nav is functional,
-              this is a credit line. */}
-          <div
-            className="hidden font-mono text-[10px] tracking-[0.18em] xl:block"
-            style={{ color: "var(--ink-faint)" }}
-          >
-            SIH 2026 · SIH26167 · SPACE TECHNOLOGY
-          </div>
-        </div>
-      </header>
-
-      {/* main copy block, right-weighted so the globe owns the left */}
-      <div className="flex flex-1 items-center">
-        <div className="ml-auto w-full max-w-2xl px-6 pb-16 sm:px-10 lg:pr-16">
-          <div
-            className="pointer-events-auto mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1"
-            style={{
-              borderColor: "rgba(184,99,26,0.4)",
-              background: "rgba(184,99,26,0.09)",
-            }}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: "var(--accent-warm)" }}
-            />
-            <span
-              className="font-mono text-[10px] uppercase tracking-[0.16em]"
-              style={{ color: "var(--accent-warm)" }}
-            >
-              Agentic vision-language assistant
-            </span>
-          </div>
-
-          <h1
-            className="text-balance text-4xl font-normal leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl"
-            style={{ color: "var(--ink-primary)", fontFamily: "var(--font-serif-display)" }}
-          >
-            What if Earth
-            <br />
-            <span
-              className="italic"
-              style={{
-                background: "linear-gradient(100deg, var(--accent), var(--accent-warm))",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
-              could answer back?
-            </span>
-          </h1>
-
-          <div className="pointer-events-auto mt-8">
-            <QueryDemo />
-          </div>
-
-          <p
-            className="mt-4 max-w-lg text-pretty text-sm leading-relaxed sm:text-base"
-            style={{ color: "var(--ink-muted)", fontFamily: "var(--font-serif-display)" }}
-          >
-            SatQuery — The Earth is speaking. We&rsquo;re making it queryable.
-          </p>
-
-          <div className="mt-7 flex flex-wrap gap-2">
-            {CAPABILITIES.map((cap) => (
-              <span
-                key={cap}
-                className="pointer-events-auto rounded-md border px-2.5 py-1 font-mono text-[10px] tracking-wide transition-colors duration-200 hover:border-cyan-400/50"
-                style={{
-                  borderColor: "rgba(61,219,224,0.3)",
-                  background: "var(--chip-bg)",
-                  color: "var(--chip-text)",
-                }}
-              >
-                {cap}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <SceneHUD />
-      <ThemeControls />
-
-      {/* bottom status strip */}
-      <footer
-        className="flex items-center justify-between border-t px-6 py-3 font-mono text-[10px] sm:px-10"
+        A three-column grid with a 1fr gutter on each side is what actually
+        centres the nav — centring it inside a flex row would only centre it
+        in the space the wordmark and the button leave over, which drifts as
+        either one changes width.
+      */}
+      <header
+        className="fixed inset-x-0 top-0 z-30 grid grid-cols-[1fr_auto_1fr] items-center px-6 py-5 backdrop-blur-[2px] sm:px-10"
         style={{
-          borderColor: "var(--hairline)",
+          // Just enough wash to keep the wordmark legible when the planet's
+          // lit limb scrolls up behind it.
           background:
-            "var(--footer-wash)",
-          color: "var(--ink-faint)",
+            "linear-gradient(to bottom, color-mix(in srgb, var(--background) 72%, transparent), transparent)",
         }}
       >
-        <span>EVIDENCE-GROUNDED · MODEL PROVENANCE EXPOSED</span>
-        <span className="hidden sm:inline">
-          DRAG TO SPIN THE GLOBE · SCROLL TO ZOOM · PRESS ENTER TO RUN A QUERY
+        <Link
+          href="/"
+          className="pointer-events-auto justify-self-start font-mono text-xs tracking-[0.22em]"
+          style={{ color: "var(--ink-primary)" }}
+        >
+          SATQUERY<span style={{ color: "var(--accent)" }}>·AI</span>
+        </Link>
+
+        {/* Centre column. Hidden below md, where there is no room for it and
+            the button on the right is the only door that matters. */}
+        <nav className="pointer-events-auto hidden items-center gap-1 justify-self-center md:flex">
+          {WORKSPACE_LINKS.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={(event) => {
+                if (!isPlainClick(event)) return;
+                event.preventDefault();
+                exitTo(item.href);
+              }}
+              className="cursor-pointer rounded-full px-3.5 py-2 text-[13px] transition-colors duration-200 hover:text-[var(--ink-primary)]"
+              style={{
+                color: "var(--ink-muted)",
+                fontFamily: "var(--font-grotesk-display)",
+              }}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        {/* Two actions, ghost then filled: the example is the low-commitment
+            look, the workspace is the real one. */}
+        <div className="flex items-center gap-2 justify-self-end">
+          <button
+            type="button"
+            onClick={loadExampleProject}
+            disabled={seeding}
+            title="Load real MODIS Terra imagery of Bengaluru East — 2019 against 2024 urban expansion"
+            className="pointer-events-auto hidden cursor-pointer rounded-full border px-4 py-2 text-[13px] transition-colors duration-200 disabled:cursor-wait disabled:opacity-70 sm:block"
+            style={{
+              fontFamily: "var(--font-grotesk-display)",
+              borderColor: "var(--control-border)",
+              background: "var(--control-bg)",
+              color: "var(--ink-muted)",
+            }}
+          >
+            {seeding ? "Loading…" : "Load example"}
+          </button>
+
+          <a
+            href="/analyze"
+            onClick={(event) => {
+              if (!isPlainClick(event)) return;
+              event.preventDefault();
+              exitTo("/analyze");
+            }}
+            className="pointer-events-auto cursor-pointer rounded-full px-5 py-2.5 text-[13px] font-medium transition-[filter,transform] duration-200 hover:brightness-110 active:scale-[0.98]"
+            style={{
+              fontFamily: "var(--font-grotesk-display)",
+              background:
+                "linear-gradient(120deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--accent-warm)))",
+              color: "var(--background)",
+            }}
+          >
+            Open workspace
+          </a>
+        </div>
+
+        {/* Failure from the seed call, parked under the bar so it never
+            shifts the layout of the bar itself. */}
+        {seedError && (
+          <p
+            className="col-span-3 mt-2 text-right font-mono text-[10px]"
+            style={{ color: "var(--accent-warm)" }}
+          >
+            {seedError}
+          </p>
+        )}
+      </header>
+
+      {/*
+        One viewport tall, everything on the centre line, and weighted to the
+        upper half — the lower half is where the planet crests the bottom
+        edge, so copy placed dead centre would sit on top of it.
+
+        100svh, not 100vh: on mobile the browser chrome collapses as you
+        scroll, and vh is measured against the collapsed height, which leaves
+        the first screen overflowing by the height of the toolbar.
+      */}
+      <section className="relative flex min-h-[100svh] flex-col items-center justify-center px-6 pb-[42vh] pt-28 text-center">
+        <span
+          className="pointer-events-auto mb-6 font-mono text-[10px] uppercase tracking-[0.2em]"
+          style={{ color: "var(--ink-muted)" }}
+        >
+          Agentic vision-language assistant
         </span>
-      </footer>
+
+        {/*
+          Set like a masthead: very large, tight leading, slightly negative
+          tracking. Line two carries the cool-to-warm accent gradient, which
+          is where the emphasis lives — the weight stays even across both
+          lines so the colour is doing the work on its own.
+        */}
+        <h1
+          className="max-w-4xl text-balance text-5xl font-medium leading-[1.02] tracking-[-0.035em] sm:text-6xl lg:text-[5.25rem]"
+          style={{
+            color: "var(--ink-primary)",
+            fontFamily: "var(--font-grotesk-display)",
+          }}
+        >
+          What if Earth
+          <br />
+          <span
+            style={{
+              background:
+                "linear-gradient(100deg, var(--accent), var(--accent-warm))",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              color: "transparent",
+            }}
+          >
+            could answer back?
+          </span>
+        </h1>
+
+        <p
+          className="mt-6 max-w-xl text-pretty text-sm leading-relaxed sm:text-base"
+          style={{
+            color: "var(--ink-muted)",
+            fontFamily: "var(--font-grotesk-display)",
+          }}
+        >
+          Ask in plain language. SatQuery plans the question, routes it to
+          specialist models, and answers with the imagery it used.
+        </p>
+
+        {/* The search bar is the product, so it takes the place the
+            reference gives a sign-up button. */}
+        <div className="pointer-events-auto mt-9 w-full max-w-2xl">
+          <QueryDemo />
+        </div>
+
+        {/* Says the page keeps going. Without it a full-bleed first screen
+            reads as the whole site. */}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-9 flex flex-col items-center gap-2"
+          style={{ color: "var(--ink-faint)" }}
+        >
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
+            Scroll
+          </span>
+          <span className="h-8 w-px animate-pulse bg-[currentColor]" />
+        </div>
+
+        <SceneHUD />
+      </section>
+
+      <ThemeControls />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import dynamic from "next/dynamic";
+import FlyVeil from "@/components/ui/FlyVeil";
 import HeroFade from "@/components/ui/HeroFade";
 import HeroOverlay from "@/components/ui/HeroOverlay";
+import LandingSections from "@/components/ui/LandingSections";
 
 /**
  * The WebGL scene is client-only: it touches window/WebGL on mount and
@@ -27,16 +29,28 @@ function SceneFallback() {
 
 export default function Home() {
   return (
+    // The page scrolls; the planet does not. The scene is pinned to the
+    // viewport and the document moves over it, which is what lets the globe
+    // stay a continuous object while the copy below travels past it.
+    //
     // Transparent so the shared sky shows through as the scene fades on
     // departure — an opaque background here would hide the very layer that
     // makes the two screens read as one place.
-    <main className="relative z-10 h-full w-full overflow-hidden">
+    <main className="relative z-10 w-full">
       {/* HeroFade wraps the scene, not the overlay: it has to cover the
           drei <Html> panels that the canvas portals into this subtree. */}
-      <HeroFade>
-        <HeroScene />
-      </HeroFade>
+      <div className="fixed inset-0 z-0">
+        <HeroFade>
+          <HeroScene />
+        </HeroFade>
+      </div>
+
       <HeroOverlay />
+      <LandingSections />
+
+      {/* Covers the hard cut from the globe to the workspace at the end of a
+          fly-to-place flight. */}
+      <FlyVeil />
     </main>
   );
 }

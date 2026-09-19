@@ -6,6 +6,7 @@ import { useState } from "react";
 import QueryDemo from "./QueryDemo";
 import SceneHUD from "./SceneHUD";
 import ThemeControls from "./ThemeControls";
+
 import { useHeroExitNavigation } from "@/hooks/useHeroTransition";
 import { HERO_EXIT_MS } from "@/lib/heroExit";
 import { apiFetch } from "@/lib/api/client";
@@ -37,6 +38,7 @@ export default function HeroOverlay() {
   const [seeding, setSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
 
+
   /**
    * Seeds the demo project on the backend, then drops the visitor straight
    * into the comparison screen looking at it. This is the "show me, don't
@@ -60,6 +62,7 @@ export default function HeroOverlay() {
   }
 
   return (
+    <>
     <div
       className="pointer-events-none relative z-10"
       style={{
@@ -119,9 +122,24 @@ export default function HeroOverlay() {
           ))}
         </nav>
 
-        {/* Two actions, ghost then filled: the example is the low-commitment
-            look, the workspace is the real one. */}
+        {/* Action buttons */}
         <div className="flex items-center gap-2 justify-self-end">
+          <button
+            type="button"
+            onClick={() => exitTo("/model-demo")}
+            title="Interactive demonstration of the fine-tuned PaliGemma 3B satellite model"
+            className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-[13px] font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all duration-200 active:scale-95 shadow-sm"
+            style={{
+              fontFamily: "var(--font-grotesk-display)",
+            }}
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+            </span>
+            <span>Model Demo</span>
+          </button>
+
           <button
             type="button"
             onClick={loadExampleProject}
@@ -248,5 +266,7 @@ export default function HeroOverlay() {
 
       <ThemeControls />
     </div>
+
+    </>
   );
 }

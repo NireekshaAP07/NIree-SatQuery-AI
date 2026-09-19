@@ -11,7 +11,7 @@ from app.core.database import check_db_connection
 from app.core.logger import get_logger, setup_logging
 from app.core.redis_client import close_redis_pool, get_redis_client, check_redis_connection
 from app.middleware.security import SecurityMiddleware
-from app.routers import assets, auth, reports, sessions, workflows
+from app.routers import assets, auth, model, reports, sessions, workflows
 
 settings = get_settings()
 setup_logging()
@@ -71,11 +71,13 @@ app.include_router(assets.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(workflows.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+app.include_router(model.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Health"])
+@app.get("/api/v1/health", tags=["Health"])
 async def health_check():
-    """Health probe for Docker/load balancer."""
+    """Health probe for Docker/load balancer/monitoring."""
     db_ok = await check_db_connection()
     redis_ok = await check_redis_connection()
     if not (db_ok and redis_ok):

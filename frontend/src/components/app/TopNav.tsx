@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { checkHealth } from "@/lib/api/endpoints";
 import { useAppearanceStore } from "@/hooks/useAppearanceStore";
 import { useTravelNavigation } from "@/hooks/useHeroTransition";
+import ModelDemoModal from "./ModelDemoModal";
 import { cx } from "./primitives";
 
 const NAV = [
@@ -33,76 +34,96 @@ type Health = "checking" | "online" | "degraded" | "offline";
 export default function TopNav() {
   const pathname = usePathname();
   const navigateWithTravel = useTravelNavigation();
+  const [showModelDemo, setShowModelDemo] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--rule-hairline)] bg-[var(--surface)] backdrop-blur-md">
-      {/* The thin terracotta rule from the comp — a masthead marker, so it
-          spans the full width above everything else. */}
-      <div className="h-[3px] w-full bg-[var(--brand-rule)]" />
+    <>
+      <header className="sticky top-0 z-40 border-b border-[var(--rule-hairline)] bg-[var(--surface)] backdrop-blur-md">
+        {/* The thin terracotta rule from the comp — a masthead marker, so it
+            spans the full width above everything else. */}
+        <div className="h-[3px] w-full bg-[var(--brand-rule)]" />
 
-      <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-8 px-6">
-        {/* Wordmark only. The icon and the strapline under it were both
-            decoration — the masthead already says where you are, and the
-            nav beside it is what people actually use. */}
-        <Link href="/" className="flex shrink-0 items-center">
-          <span className="text-[13px] font-bold uppercase tracking-[0.1em] text-[var(--ink-primary)]">
-            SatQuery AI
-          </span>
-        </Link>
+        <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-8 px-6">
+          {/* Wordmark only. The icon and the strapline under it were both
+              decoration — the masthead already says where you are, and the
+              nav beside it is what people actually use. */}
+          <Link href="/" className="flex shrink-0 items-center">
+            <span className="text-[13px] font-bold uppercase tracking-[0.1em] text-[var(--ink-primary)]">
+              SatQuery AI
+            </span>
+          </Link>
 
-        <nav className="flex flex-1 items-center justify-center gap-1">
-          {NAV.map((item) => {
-            // "/" must match exactly or it lights up on every route.
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={(event) => {
-                  // Modified clicks stay ordinary link clicks, so
-                  // ⌘-click and middle-click still open a new tab.
-                  if (event.metaKey || event.ctrlKey || event.shiftKey) return;
-                  // Clicking the tab you're already on should do nothing
-                  // rather than replay the animation on the same page.
-                  if (isActive) {
+          <nav className="flex flex-1 items-center justify-center gap-1">
+            {NAV.map((item) => {
+              // "/" must match exactly or it lights up on every route.
+              const isActive =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={(event) => {
+                    // Modified clicks stay ordinary link clicks, so
+                    // ⌘-click and middle-click still open a new tab.
+                    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+                    // Clicking the tab you're already on should do nothing
+                    // rather than replay the animation on the same page.
+                    if (isActive) {
+                      event.preventDefault();
+                      return;
+                    }
                     event.preventDefault();
-                    return;
-                  }
-                  event.preventDefault();
-                  navigateWithTravel(
-                    item.href,
-                    // Home is the full flight — the globe flies back in on
-                    // the other side and the sky should match it. Moving
-                    // between analysis screens gets a lighter push.
-                    item.href === "/" ? "full" : "short",
-                  );
-                }}
-                aria-current={isActive ? "page" : undefined}
-                className={cx(
-                  "relative px-3 py-5 text-sm transition-colors",
-                  isActive
-                    ? "font-medium text-[var(--ink-primary)]"
-                    : "text-[var(--ink-muted)] hover:text-[var(--ink-primary)]",
-                )}
-              >
-                {item.label}
-                {isActive ? (
-                  <span className="absolute inset-x-3 bottom-3 block h-[2px] rounded-full bg-[var(--brand-rule)]" />
-                ) : null}
-              </Link>
-            );
-          })}
-        </nav>
+                    navigateWithTravel(
+                      item.href,
+                      // Home is the full flight — the globe flies back in on
+                      // the other side and the sky should match it. Moving
+                      // between analysis screens gets a lighter push.
+                      item.href === "/" ? "full" : "short",
+                    );
+                  }}
+                  aria-current={isActive ? "page" : undefined}
+                  className={cx(
+                    "relative px-3 py-5 text-sm transition-colors",
+                    isActive
+                      ? "font-medium text-[var(--ink-primary)]"
+                      : "text-[var(--ink-muted)] hover:text-[var(--ink-primary)]",
+                  )}
+                >
+                  {item.label}
+                  {isActive ? (
+                    <span className="absolute inset-x-3 bottom-3 block h-[2px] rounded-full bg-[var(--brand-rule)]" />
+                  ) : null}
+                </Link>
+              );
+            })}
+          </nav>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <ApiStatus />
-          <ThemeToggle />
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowModelDemo(true)}
+              title="Interactive demonstration of the fine-tuned PaliGemma 3B satellite model"
+              className="flex items-center gap-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/20 transition-all shadow-sm active:scale-95"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+              </span>
+              <span>Model Demo</span>
+            </button>
+            <ApiStatus />
+            <ThemeToggle />
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <ModelDemoModal
+        isOpen={showModelDemo}
+        onClose={() => setShowModelDemo(false)}
+      />
+    </>
   );
 }
 

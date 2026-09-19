@@ -50,6 +50,28 @@ class Settings(BaseSettings):
             return [o.strip() for o in v.split(",")]
         return v
 
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def resolve_db_host(cls, v: str) -> str:
+        import socket
+        if "@db:" in v:
+            try:
+                socket.gethostbyname("db")
+            except socket.gaierror:
+                v = v.replace("@db:", "@localhost:")
+        return v
+
+    @field_validator("redis_url", mode="after")
+    @classmethod
+    def resolve_redis_host(cls, v: str) -> str:
+        import socket
+        if "redis://redis:" in v:
+            try:
+                socket.gethostbyname("redis")
+            except socket.gaierror:
+                v = v.replace("redis://redis:", "redis://localhost:")
+        return v
+
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
         """Refuse to start in production if CORS or secrets are misconfigured."""

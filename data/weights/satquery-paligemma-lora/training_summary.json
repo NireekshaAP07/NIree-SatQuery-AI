@@ -1,0 +1,15 @@
+{
+  "dataset_name": "bigearthnet-medium",
+  "model_id": "google/paligemma-3b-pt-224",
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "gradient_accumulation_steps": 16,
+  "epochs": 3,
+  "test_run": false,
+  "train_samples": 25000,
+  "val_samples": 10000,
+  "final_train_loss": 0.15763344764709472,
+  "best_eval_loss": 0.15827466547489166,
+  "total_steps": 4689,
+  "output_dir": "/home/kishanravi/SatQuery_AI/data/weights/satquery-paligemma-lora"
+}

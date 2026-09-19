@@ -39,8 +39,9 @@ storage/*.db
 data/raw/
 # HuggingFace datasets built by build_vlm_dataset.py
 data/derived/
-# Trained LoRA weights and training summaries
-data/weights/
+# Trained LoRA weights (ignore other experiment weights, but track the trained adapter)
+data/weights/*
+!data/weights/satquery-paligemma-lora/
 # Intermediate training checkpoints
 data/tmp/
 # Auto-generated evaluation reports

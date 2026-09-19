@@ -87,12 +87,13 @@ git push origin master
 > - **Dataset**: `bigearthnet-medium` (25,000 train / 10,000 validation samples)
 > - **Training Duration & Epochs**: 3 full epochs (4,689 steps)
 > - **Loss Metrics**: Final train loss **0.1576**, best validation loss **0.1583**
-> - **Artifacts Location**: `data/weights/satquery-paligemma-lora/` (~50 MB)
+> - **Artifacts Location**: `data/weights/satquery-paligemma-lora/` (~48 MB total)
 > 
-> **Note for teammates:** Because `data/weights/` is git-ignored in [.gitignore](file:///home/kishanravi/SatQuery_AI/.gitignore) to avoid repository bloat, the weights are **not** pulled by `git clone`. You must transfer the `data/weights/satquery-paligemma-lora` folder from the training machine to the Oracle server via `scp` or `rsync` (instructions in [Section 7.2](#72-transfer-and-verify-fine-tuned-model-weights)).
+> **Automatic Download via Git**: The `data/weights/satquery-paligemma-lora/` folder is tracked in Git, meaning when your teammate runs `git clone` or `git pull` on the Oracle server, the model weights are **automatically included**.
 
 Make sure you have your API keys ready:
 - **Google Gemini API Key**: [Google AI Studio](https://aistudio.google.com/)
+- **Hugging Face Token (HF_TOKEN)**: Required on first boot to download base PaliGemma 3B weights.
 
 ---
 
@@ -174,21 +175,10 @@ git clone https://github.com/<YOUR_USERNAME>/SatQuery_AI.git
 cd SatQuery_AI
 ```
 
-### 7.2. Transfer and Verify Fine-Tuned Model Weights
-The custom PaliGemma 3B LoRA adapter (~50 MB) is already trained locally. Because ML weights are git-ignored, copy them directly from the local development machine to the Oracle VM:
+### 7.2. Verify Fine-Tuned Model Weights
+Because the trained PaliGemma 3B LoRA adapter (~48 MB) is tracked in Git, it is **automatically downloaded** when you run `git clone`!
 
-**From your local machine (where model training ran):**
-```bash
-# Ensure target directory exists on Oracle VM
-ssh -i /path/to/your/ssh_key ubuntu@<YOUR_VM_PUBLIC_IP> "mkdir -p /home/ubuntu/SatQuery_AI/data/weights"
-
-# Copy the trained LoRA adapter directory
-rsync -avz -e "ssh -i /path/to/your/ssh_key" \
-  data/weights/satquery-paligemma-lora \
-  ubuntu@<YOUR_VM_PUBLIC_IP>:/home/ubuntu/SatQuery_AI/data/weights/
-```
-
-**On the Oracle Server, verify the files:**
+Verify the weights exist on your server:
 ```bash
 ls -la /home/ubuntu/SatQuery_AI/data/weights/satquery-paligemma-lora
 ```
@@ -196,11 +186,13 @@ You should see:
 - `adapter_model.safetensors` (~15.4 MB)
 - `adapter_config.json`
 - `processor_config.json`
-- `tokenizer.json` & `tokenizer_config.json`
+- `tokenizer.json` (33 MB) & `tokenizer_config.json`
 - `training_summary.json` (shows 3 epochs, 4,689 steps, train loss 0.1576)
 
 > [!TIP]
 > `docker-compose.prod.yml` is already configured with `./data/weights:/app/data/weights:ro` so both `api` and `worker` containers can automatically access these weights at `/app/data/weights/satquery-paligemma-lora`.
+
+*(Optional fallback: If you ever need to manually re-transfer weights from your local training machine: `rsync -avz -e "ssh -i key" data/weights/satquery-paligemma-lora ubuntu@<IP>:/home/ubuntu/SatQuery_AI/data/weights/`)*
 
 ### 7.3. Configure Dependencies (Optional: Local VLM inside Docker)
 If you wish to run the fine-tuned PaliGemma model directly inside the Docker container on Oracle ARM CPU, enable the PyTorch and transformers dependencies before building:

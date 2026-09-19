@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 SatQuery AI — BigEarthNet VQA Dataset Builder
-Downloads the BigEarthNet dataset and converts it into a HuggingFace VQA dataset
+Loads the extracted BigEarthNet dataset and converts it into a HuggingFace VQA dataset
 suitable for fine-tuning PaliGemma.
 
 Usage:
   python scripts/build_vlm_dataset.py --dataset_name bigearthnet-mini
   python scripts/build_vlm_dataset.py --dataset_name bigearthnet-medium
+  python scripts/build_vlm_dataset.py --dataset_name bigearthnet-medium --diversify
 """
 
 import argparse
@@ -16,6 +17,7 @@ import os
 import pathlib
 import random
 import tarfile
+import time
 
 import gdown
 import numpy as np
@@ -132,12 +134,36 @@ def download_data(dataset_dir: str, dataset_name: str) -> pathlib.Path:
 
 
 def create_qa_pairs(class_names: list, present_labels: list) -> list:
-    """Generate question-answer pairs for the given labels for VLM fine-tuning."""
+    """Generate question-answer pairs for the given labels for VLM fine-tuning.
+
+    Returns a list of 4 QA dicts, one per template. Each has 'question' and 'answer' keys.
+    """
     valid_labels = [class_names[i] for i in present_labels if 0 <= i < len(class_names)]
     if not valid_labels:
         labels_str = "no specific land cover features"
     else:
         labels_str = ", ".join(valid_labels)
+
+    count = len(valid_labels)
+
+    # Template 3: how many distinct land types?
+    count_answer = (
+        "no identifiable land cover types"
+        if count == 0
+        else f"{count} land cover type{'s' if count != 1 else ''}: {labels_str}"
+    )
+
+    # Template 4: is there urban land?
+    urban_keywords = ("urban", "industrial", "road", "rail", "construction", "airport", "port", "sport", "leisure")
+    has_urban = any(
+        any(kw in lbl.lower() for kw in urban_keywords)
+        for lbl in valid_labels
+    )
+    urban_answer = (
+        f"Yes, this image contains urban or built-up areas including: {labels_str}."
+        if has_urban
+        else "No, this image does not contain significant urban or built-up land cover."
+    )
 
     return [
         {
@@ -148,73 +174,115 @@ def create_qa_pairs(class_names: list, present_labels: list) -> list:
             "question": "Describe the terrain and land cover features in this image.",
             "answer": f"The image shows {labels_str}.",
         },
+        {
+            "question": "How many distinct land cover types are present in this satellite image?",
+            "answer": count_answer,
+        },
+        {
+            "question": "Is there any urban or built-up land in this satellite image?",
+            "answer": urban_answer,
+        },
     ]
 
 
-def process_split(split_path: pathlib.Path, max_samples: int = None):
+def process_split(split_path: pathlib.Path, max_samples: int = None, diversify: bool = False):
     """
-    Load a BigEarthNet split (via deeplake if available, or direct fallback)
+    Load a BigEarthNet split directly from the extracted Deep Lake format
     and yield {'image': PIL.Image, 'prompt': str, 'text': str} dicts.
+
+    Args:
+        split_path: Path to the split directory (e.g., data/raw/bigearthnet/bigearthnet-medium/train).
+        max_samples: Maximum number of source samples to process.
+        diversify: If True, emit all 4 QA pairs per sample instead of a random one.
+                   This multiplies effective dataset size by 4.
     """
-    # 1. Try deeplake
+    import deeplake
+
+    # Check for Deep Lake version compatibility
+    dl_ver = getattr(deeplake, "__version__", "unknown")
     try:
-        import deeplake
+        major_ver = int(dl_ver.split(".")[0])
+        if major_ver >= 4:
+            raise RuntimeError(
+                f"Installed deeplake version {dl_ver} is not compatible with BigEarthNet's lz4-compressed dataset. "
+                f"Please install deeplake 3.x by running: pip install 'deeplake<4'"
+            )
+    except (ValueError, IndexError):
+        pass
 
-        logger.info(f"Loading split with deeplake from {split_path}")
+    logger.info(f"Loading split from {split_path} with deeplake {dl_ver}...")
+    try:
         ds = deeplake.load(str(split_path), read_only=True, verbose=False)
-
-        class_names = BIGEARTHNET_LABELS_43
-        try:
-            if hasattr(ds, "info") and hasattr(ds.info, "class_names") and ds.info.class_names:
-                class_names = list(ds.info.class_names)
-        except Exception:
-            pass
-
-        n_samples = len(ds)
-        if max_samples:
-            n_samples = min(n_samples, max_samples)
-
-        logger.info(f"  Processing {n_samples} samples from {split_path.name}...")
-
-        for idx in range(n_samples):
-            item = ds[idx]
-            raw = item["data"].numpy()  # usually (3, 120, 120) uint16 in BGR order
-
-            # Transpose (C, H, W) -> (H, W, C)
-            if raw.ndim == 3 and raw.shape[0] == 3:
-                raw = np.transpose(raw, (1, 2, 0))
-                # BGR -> RGB conversion
-                raw = raw[:, :, ::-1]
-
-            # Contrast stretch 2% to 98% percentile into uint8 RGB
-            p2, p98 = np.percentile(raw, (2, 98))
-            if p98 > p2:
-                norm = np.clip((raw - p2) / (p98 - p2) * 255.0, 0, 255).astype(np.uint8)
-            else:
-                norm = np.zeros_like(raw, dtype=np.uint8)
-
-            pil_img = Image.fromarray(norm).convert("RGB")
-            raw_labels = item["labels"].numpy().flatten().tolist()
-            present_labels = [int(lbl) for lbl in raw_labels]
-
-            qa_pairs = create_qa_pairs(class_names, present_labels)
-            qa = random.choice(qa_pairs)
-
-            yield {"image": pil_img, "text": qa["answer"], "prompt": qa["question"]}
-        return
-
     except Exception as e:
-        logger.warning(f"Deeplake failed to load ({e}), falling back to synthetic generator.")
+        logger.error(f"Failed to load dataset split at {split_path}: {e}")
+        raise RuntimeError(
+            f"Unable to load BigEarthNet split at {split_path}. "
+            f"Ensure the dataset is fully extracted and deeplake<4 is installed: {e}"
+        ) from e
 
-    # 2. Synthetic fallback for testing if split reading fails
-    count = max_samples or 10
-    logger.info(f"Generating {count} synthetic samples for {split_path.name}...")
-    for _ in range(count):
-        img = Image.new("RGB", (120, 120), color=(random.randint(20, 50), random.randint(100, 180), random.randint(20, 50)))
-        sample_labels = random.sample(range(len(BIGEARTHNET_LABELS_43)), k=random.randint(1, 3))
-        qa_pairs = create_qa_pairs(BIGEARTHNET_LABELS_43, sample_labels)
-        qa = random.choice(qa_pairs)
-        yield {"image": img, "text": qa["answer"], "prompt": qa["question"]}
+    # Determine class taxonomy
+    class_names = BIGEARTHNET_LABELS_43
+    dataset_info_file = split_path / "dataset_info.json"
+    if dataset_info_file.exists():
+        try:
+            with open(dataset_info_file, "r") as f:
+                info = json.load(f)
+            if "class_names" in info and info["class_names"]:
+                class_names = list(info["class_names"])
+                logger.info(f"Loaded {len(class_names)} class names from {dataset_info_file.name}")
+        except Exception as e:
+            logger.warning(f"Could not read {dataset_info_file}: {e}. Using BIGEARTHNET_LABELS_43.")
+    elif hasattr(ds, "info") and hasattr(ds.info, "class_names") and ds.info.class_names:
+        class_names = list(ds.info.class_names)
+
+    total_samples = len(ds)
+    n_samples = min(total_samples, max_samples) if max_samples else total_samples
+
+    mode_str = "diversify (all 4 QA templates)" if diversify else "random QA template"
+    logger.info(f"  Processing {n_samples} real BigEarthNet samples from {split_path.name} [{mode_str}]...")
+
+    t0 = time.time()
+    for idx, item in enumerate(ds):
+        if max_samples and idx >= max_samples:
+            break
+
+        raw = item["data"].numpy()  # (3, 120, 120) uint16 in BGR order
+
+        # Transpose (C, H, W) -> (H, W, C)
+        if raw.ndim == 3 and raw.shape[0] == 3:
+            raw = np.transpose(raw, (1, 2, 0))
+            # BGR -> RGB conversion
+            raw = raw[:, :, ::-1]
+
+        # Contrast stretch 2% to 98% percentile into uint8 RGB
+        p2, p98 = np.percentile(raw, (2, 98))
+        if p98 > p2:
+            norm = np.clip((raw - p2) / (p98 - p2) * 255.0, 0, 255).astype(np.uint8)
+        else:
+            norm = np.zeros_like(raw, dtype=np.uint8)
+
+        pil_img = Image.fromarray(norm).convert("RGB")
+        raw_labels = item["labels"].numpy().flatten().tolist()
+        present_labels = [int(lbl) for lbl in raw_labels]
+
+        qa_pairs = create_qa_pairs(class_names, present_labels)
+
+        if diversify:
+            for qa in qa_pairs:
+                yield {"image": pil_img, "text": qa["answer"], "prompt": qa["question"]}
+        else:
+            qa = random.choice(qa_pairs)
+            yield {"image": pil_img, "text": qa["answer"], "prompt": qa["question"]}
+
+        # Progress logging every 2500 samples or final
+        if (idx + 1) % 2500 == 0 or (idx + 1) == n_samples:
+            elapsed = time.time() - t0
+            rate = (idx + 1) / elapsed if elapsed > 0 else 0
+            eta = (n_samples - idx - 1) / rate if rate > 0 else 0
+            logger.info(
+                f"    [{idx + 1}/{n_samples}] {elapsed:.0f}s elapsed | "
+                f"{rate:.1f} samples/s | ETA: {eta:.0f}s"
+            )
 
 
 def main():
@@ -222,19 +290,30 @@ def main():
     parser.add_argument(
         "--dataset_name",
         type=str,
-        default="bigearthnet-mini",
+        default="bigearthnet-medium",
         choices=["bigearthnet-mini", "bigearthnet-medium", "bigearthnet-full"],
-        help="Which version of BigEarthNet to download and process.",
+        help="Which version of BigEarthNet to process.",
     )
     parser.add_argument("--max_train", type=int, default=None, help="Max train samples (for debugging/testing).")
     parser.add_argument("--max_val", type=int, default=None, help="Max val samples (for debugging/testing).")
+    parser.add_argument(
+        "--diversify",
+        action="store_true",
+        help=(
+            "Emit all 4 QA templates per sample instead of a random one. "
+            "Multiplies effective dataset size by 4 at the cost of longer build time."
+        ),
+    )
     args = parser.parse_args()
 
     project_root = pathlib.Path(__file__).parent.parent.resolve()
     raw_dir = project_root / "data" / "raw" / "bigearthnet"
     out_dir = project_root / "data" / "derived" / f"{args.dataset_name}_vqa"
 
-    # 1. Download & extract
+    if args.diversify:
+        logger.info("--diversify enabled: all 4 QA templates will be emitted per sample (4× data size).")
+
+    # 1. Check / extract dataset path (skips download if directory already exists)
     dataset_path = download_data(str(raw_dir), args.dataset_name)
 
     # 2. Process splits
@@ -255,16 +334,16 @@ def main():
         limit = args.max_train if split == "train" else args.max_val
         logger.info(f"Building HF dataset for '{split}' split (limit={limit})...")
 
-        def gen(s_path=split_path, s_limit=limit):
-            yield from process_split(s_path, max_samples=s_limit)
+        def gen(s_path=split_path, s_limit=limit, s_diversify=args.diversify):
+            yield from process_split(s_path, max_samples=s_limit, diversify=s_diversify)
 
         hf_ds = Dataset.from_generator(gen, features=features)
         out_split_dir = out_dir / split
         out_split_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Saving {len(hf_ds)} examples to {out_split_dir}")
+        logger.info(f"Saving {len(hf_ds)} real BigEarthNet examples to {out_split_dir}")
         hf_ds.save_to_disk(str(out_split_dir))
 
-    logger.info(f"Done! VQA dataset saved to {out_dir}")
+    logger.info(f"Done! Real BigEarthNet VQA dataset successfully saved to {out_dir}")
 
 
 if __name__ == "__main__":

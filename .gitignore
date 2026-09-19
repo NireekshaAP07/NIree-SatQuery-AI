@@ -33,3 +33,15 @@ storage/*.db
 
 # Oracle production env
 .env.prod
+
+# ── ML data, checkpoints, weights — NEVER commit ─────────────────────────────
+# Raw downloaded datasets (BigEarthNet tarballs + extracted splits)
+data/raw/
+# HuggingFace datasets built by build_vlm_dataset.py
+data/derived/
+# Trained LoRA weights and training summaries
+data/weights/
+# Intermediate training checkpoints
+data/tmp/
+# Auto-generated evaluation reports
+data/reports/

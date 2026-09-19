@@ -45,6 +45,7 @@ services:
       - .env.prod
     volumes:
       - satquery_data:/app/data
+      - ./data/weights:/app/data/weights:ro
     depends_on:
       db:
         condition: service_healthy
@@ -64,6 +65,7 @@ services:
       - .env.prod
     volumes:
       - satquery_data:/app/data
+      - ./data/weights:/app/data/weights:ro
     depends_on:
       db:
         condition: service_healthy

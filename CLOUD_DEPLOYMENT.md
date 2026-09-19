@@ -80,6 +80,17 @@ git commit -m "feat: ready for cloud deployment"
 git push origin master
 ```
 
+### 3.1. Fine-Tuned Model Weights Ready (PaliGemma 3B + LoRA)
+> [!IMPORTANT]
+> **The Vision-Language Model is already fully trained!**
+> - **Model**: Google PaliGemma 3B (`google/paligemma-3b-pt-224`) + 4-bit QLoRA
+> - **Dataset**: `bigearthnet-medium` (25,000 train / 10,000 validation samples)
+> - **Training Duration & Epochs**: 3 full epochs (4,689 steps)
+> - **Loss Metrics**: Final train loss **0.1576**, best validation loss **0.1583**
+> - **Artifacts Location**: `data/weights/satquery-paligemma-lora/` (~50 MB)
+> 
+> **Note for teammates:** Because `data/weights/` is git-ignored in [.gitignore](file:///home/kishanravi/SatQuery_AI/.gitignore) to avoid repository bloat, the weights are **not** pulled by `git clone`. You must transfer the `data/weights/satquery-paligemma-lora` folder from the training machine to the Oracle server via `scp` or `rsync` (instructions in [Section 7.2](#72-transfer-and-verify-fine-tuned-model-weights)).
+
 Make sure you have your API keys ready:
 - **Google Gemini API Key**: [Google AI Studio](https://aistudio.google.com/)
 
@@ -163,7 +174,42 @@ git clone https://github.com/<YOUR_USERNAME>/SatQuery_AI.git
 cd SatQuery_AI
 ```
 
-### 7.2. Configure Environment Variables
+### 7.2. Transfer and Verify Fine-Tuned Model Weights
+The custom PaliGemma 3B LoRA adapter (~50 MB) is already trained locally. Because ML weights are git-ignored, copy them directly from the local development machine to the Oracle VM:
+
+**From your local machine (where model training ran):**
+```bash
+# Ensure target directory exists on Oracle VM
+ssh -i /path/to/your/ssh_key ubuntu@<YOUR_VM_PUBLIC_IP> "mkdir -p /home/ubuntu/SatQuery_AI/data/weights"
+
+# Copy the trained LoRA adapter directory
+rsync -avz -e "ssh -i /path/to/your/ssh_key" \
+  data/weights/satquery-paligemma-lora \
+  ubuntu@<YOUR_VM_PUBLIC_IP>:/home/ubuntu/SatQuery_AI/data/weights/
+```
+
+**On the Oracle Server, verify the files:**
+```bash
+ls -la /home/ubuntu/SatQuery_AI/data/weights/satquery-paligemma-lora
+```
+You should see:
+- `adapter_model.safetensors` (~15.4 MB)
+- `adapter_config.json`
+- `processor_config.json`
+- `tokenizer.json` & `tokenizer_config.json`
+- `training_summary.json` (shows 3 epochs, 4,689 steps, train loss 0.1576)
+
+> [!TIP]
+> `docker-compose.prod.yml` is already configured with `./data/weights:/app/data/weights:ro` so both `api` and `worker` containers can automatically access these weights at `/app/data/weights/satquery-paligemma-lora`.
+
+### 7.3. Configure Dependencies (Optional: Local VLM inside Docker)
+If you wish to run the fine-tuned PaliGemma model directly inside the Docker container on Oracle ARM CPU, enable the PyTorch and transformers dependencies before building:
+```bash
+cp requirements-gpu.txt requirements.txt
+```
+*(If you only plan to use the Gemini VLM API, you can skip this step and keep the default lightweight `requirements.txt`).*
+
+### 7.4. Configure Environment Variables
 Create `.env.prod.real` from the template:
 ```bash
 cp .env.prod .env.prod.real
@@ -200,9 +246,9 @@ ALLOWED_ORIGINS=http://<YOUR_VM_PUBLIC_IP>
 APP_ENV=development
 
 # ── VLM (VISION-LANGUAGE MODEL) ────────────────────────────────────────────────
-# If using fine-tuned PaliGemma weights:
-VLM_MODEL_NAME=./data/weights/satquery-paligemma-lora
-VLM_DEVICE=cpu    # set to cuda if GPU is present
+# Uses the fine-tuned PaliGemma LoRA weights mounted into /app/data/weights:
+VLM_MODEL_NAME=/app/data/weights/satquery-paligemma-lora
+VLM_DEVICE=cpu    # Use 'cpu' for Oracle Free Tier ARM, or 'cuda' if GPU instance
 
 # ── GEMINI LLM ORCHESTRATOR & REPORT AGENT ────────────────────────────────────
 LLM_PROVIDER=gemini
@@ -218,7 +264,7 @@ NEXT_PUBLIC_WS_URL=ws://<YOUR_VM_PUBLIC_IP>/api/v1
 
 Save and exit (`Ctrl + O`, `Enter`, then `Ctrl + X`).
 
-### 7.3. Build & Launch Containers
+### 7.5. Build & Launch Containers
 SatQuery AI includes optimized multi-stage Docker build caching:
 
 ```bash
@@ -227,7 +273,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod.real up -d --buil
 ```
 > ⏱️ *Note:* The initial build installs GDAL, spatial packages, and compiles Next.js. It takes ~8-12 minutes. Subsequent builds will take ~60-90 seconds.
 
-### 7.4. Inspect Running Services
+### 7.6. Inspect Running Services
 Check container status:
 ```bash
 docker compose -f docker-compose.prod.yml ps

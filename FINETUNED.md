@@ -1,4 +1,12 @@
-# How to Fine-Tune the Vision-Language Model (VLM) for SatQuery AI
+# SatQuery AI — Fine-Tuned Vision-Language Model (VLM)
+
+> [!NOTE]
+> **Training Status: COMPLETED ✅**
+> The model has been successfully fine-tuned on the `bigearthnet-medium` dataset (25,000 train / 10,000 validation samples) for **3 full epochs (4,689 steps)**.
+> - **Final Training Loss**: `0.1576`
+> - **Best Validation Loss**: `0.1583`
+> - **Adapter Location**: `data/weights/satquery-paligemma-lora/`
+> - **Ready for Deployment**: See [CLOUD_DEPLOYMENT.md](file:///home/kishanravi/SatQuery_AI/CLOUD_DEPLOYMENT.md#72-transfer-and-verify-fine-tuned-model-weights) for copying weights to the Oracle production VM.
 
 This guide walks you through fine-tuning **Google PaliGemma 3B** on the **BigEarthNet** satellite dataset using **4-bit QLoRA**, specifically tailored to run comfortably within **6 GB VRAM** on an **NVIDIA GeForce RTX 4050 Laptop GPU**.
 
@@ -51,7 +59,7 @@ python -c "import torch, bitsandbytes; print('CUDA Available:', torch.cuda.is_av
 
 ---
 
-## 3. Step-by-Step Training Workflow
+## 3. Step-by-Step Training & Evaluation Workflow
 
 ### Step 1: Download & Build the VQA Dataset
 
@@ -65,9 +73,13 @@ python scripts/build_vlm_dataset.py --dataset_name bigearthnet-mini
 *Outputs:* Hugging Face dataset saved to `data/derived/bigearthnet-mini_vqa/` (train & val splits).
 
 #### B. Medium Dataset (Production Training)
-When ready to train the full model:
+When ready to train the production model:
 ```bash
 python scripts/build_vlm_dataset.py --dataset_name bigearthnet-medium
+```
+*Optional 4× Data Diversification:*
+```bash
+python scripts/build_vlm_dataset.py --dataset_name bigearthnet-medium --diversify
 ```
 *Outputs:* Hugging Face dataset saved to `data/derived/bigearthnet-medium_vqa/`.
 
@@ -77,9 +89,10 @@ python scripts/build_vlm_dataset.py --dataset_name bigearthnet-medium
 
 The training script automatically applies memory optimizations for your RTX 4050 6 GB GPU:
 - `per_device_train_batch_size=1`
-- `gradient_accumulation_steps=8` (effective batch size of 8)
+- `gradient_accumulation_steps=16` (effective batch size of 16 for medium)
 - `gradient_checkpointing=True` (activation recomputation)
 - `optim="paged_adamw_32bit"`
+- Best checkpoint tracked by `eval_loss` and saved automatically
 
 #### A. Sanity Check Run (10 Steps)
 Runs a quick 10-step loop on 50 samples to verify memory limits and pipeline execution:
@@ -87,20 +100,50 @@ Runs a quick 10-step loop on 50 samples to verify memory limits and pipeline exe
 python scripts/finetune_vlm.py --dataset_name bigearthnet-mini --test_run
 ```
 
-#### B. Full Fine-Tuning
-Train the model for 3 epochs:
+#### B. Medium-Scale Fine-Tuning (Recommended)
+Train the model for 3 epochs with LoRA rank 16:
 ```bash
-python scripts/finetune_vlm.py --dataset_name bigearthnet-medium --epochs 3
+python scripts/finetune_vlm.py \
+  --dataset_name bigearthnet-medium \
+  --lora_r 16 \
+  --lora_alpha 32 \
+  --gradient_accumulation_steps 16 \
+  --epochs 3
 ```
 
-When training completes, the adapter weights and processor configuration will be saved to:
+When training completes, the adapter weights, processor configuration, and training summary will be saved to:
 ```
 data/weights/satquery-paligemma-lora/
+├── adapter_config.json
+├── adapter_model.safetensors
+├── preprocessor_config.json
+└── training_summary.json
 ```
 
 ---
 
-### Step 3: Test VLM Inference
+### Step 3: Run Model Evaluation
+
+Evaluate the fine-tuned model against the validation split to compute Exact Match (EM), Label Recall, Label Precision, and Label F1:
+
+```bash
+# Dry run verification (fast test without loading GPU model):
+python scripts/evaluate_vlm.py --dataset_name bigearthnet-mini --max_samples 10 --dry_run
+
+# Full evaluation on medium validation split:
+python scripts/evaluate_vlm.py --dataset_name bigearthnet-medium
+```
+
+*Outputs:* Report saved to `data/reports/vlm_evaluation_results.json` containing:
+- `mean_exact_match`
+- `mean_label_precision`
+- `mean_label_recall`
+- `mean_label_f1`
+- Sample previews with prompt, prediction, and ground truth
+
+---
+
+### Step 4: Test Interactive VLM Inference
 
 Verify that the fine-tuned model loads properly, performs inference on a satellite tile, and stays within the 6 GB VRAM budget:
 
@@ -118,7 +161,7 @@ The script will log:
 
 ---
 
-### Step 4: Integrate with SatQuery AI Backend
+### Step 5: Integrate with SatQuery AI Backend
 
 Your `.env` file is already pre-configured to point to the local weights directory:
 
@@ -144,6 +187,7 @@ The application will automatically detect `data/weights/satquery-paligemma-lora/
 | `--dataset_name` | `bigearthnet-mini` | Options: `bigearthnet-mini`, `bigearthnet-medium`, `bigearthnet-full` |
 | `--max_train` | `None` | Restrict number of training samples for debugging |
 | `--max_val` | `None` | Restrict number of validation samples for debugging |
+| `--diversify` | `False` | Emit all 4 QA templates per sample instead of random 1 (4× dataset augmentation) |
 
 ### `scripts/finetune_vlm.py`
 | Argument | Default | Description |
@@ -151,7 +195,20 @@ The application will automatically detect `data/weights/satquery-paligemma-lora/
 | `--dataset_name` | `bigearthnet-mini` | Dataset folder under `data/derived/` |
 | `--model_id` | `google/paligemma-3b-pt-224` | Base Hugging Face model |
 | `--epochs` | `3` | Number of training epochs |
+| `--lora_r` | `8` | LoRA rank (use `16` for medium-scale training) |
+| `--lora_alpha` | `2*lora_r` | LoRA alpha scaling factor |
+| `--gradient_accumulation_steps` | `8` | Gradient accumulation steps (use `16` for medium) |
+| `--save_dir` | `None` | Custom output directory (defaults to `data/weights/satquery-paligemma-lora`) |
 | `--test_run` | `False` | Run only 10 steps to test pipeline |
+
+### `scripts/evaluate_vlm.py`
+| Argument | Default | Description |
+|---|---|---|
+| `--dataset_name` | `bigearthnet-medium` | Dataset folder under `data/derived/` |
+| `--checkpoint_dir` | `None` | Override LoRA checkpoint directory |
+| `--max_samples` | `None` | Limit evaluation to first N validation samples |
+| `--output_file` | `None` | Path to custom output JSON report |
+| `--dry_run` | `False` | Run test evaluation without loading GPU model |
 
 ---
 
@@ -171,4 +228,4 @@ The application will automatically detect `data/weights/satquery-paligemma-lora/
 ```bash
 PYTHONPATH=. pytest tests/test_vlm_pipeline.py -v --noconftest
 ```
-All 5 tests validate stubs, quantization configuration, QA pair generation, and inference slicing.
+All tests validate stubs, quantization configuration, QA pair generation, and inference slicing.

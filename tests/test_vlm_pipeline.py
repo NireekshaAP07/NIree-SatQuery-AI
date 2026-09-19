@@ -73,7 +73,7 @@ def test_create_qa_pairs():
     present = [0, 4] # Urban + Coniferous forest
 
     pairs = create_qa_pairs(classes, present)
-    assert len(pairs) == 2
+    assert len(pairs) == 4
     assert "Continuous urban fabric" in pairs[0]["answer"]
     assert "Coniferous forest" in pairs[0]["answer"]
     assert pairs[0]["question"].startswith("What land cover")
@@ -81,6 +81,36 @@ def test_create_qa_pairs():
     # Empty labels case
     empty_pairs = create_qa_pairs(classes, [])
     assert "no specific land cover features" in empty_pairs[0]["answer"]
+
+
+def test_evaluate_vlm_metrics():
+    """Verify metrics computation in evaluate_vlm."""
+    from scripts.evaluate_vlm import compute_sample_metrics, extract_labels_from_text
+
+    candidates = ["Continuous urban fabric", "Coniferous forest", "Water bodies"]
+    text = "The image shows Continuous urban fabric and Coniferous forest."
+    extracted = extract_labels_from_text(text, candidates)
+    assert "Continuous urban fabric" in extracted
+    assert "Coniferous forest" in extracted
+    assert "Water bodies" not in extracted
+
+    # Sample metrics: perfect match
+    gt = "Continuous urban fabric, Coniferous forest"
+    pred = "Continuous urban fabric, Coniferous forest"
+    metrics = compute_sample_metrics(gt, pred, candidates)
+    assert metrics["exact_match"] == 1.0
+    assert metrics["precision"] == 1.0
+    assert metrics["recall"] == 1.0
+    assert metrics["f1"] == 1.0
+
+    # Sample metrics: partial match
+    gt = "Continuous urban fabric, Coniferous forest"
+    pred = "The area contains Coniferous forest and Water bodies"
+    metrics = compute_sample_metrics(gt, pred, candidates)
+    assert metrics["exact_match"] == 0.0
+    assert metrics["recall"] == 0.5  # 1 out of 2 ground truth labels found
+    assert metrics["precision"] == 0.5  # 1 out of 2 predicted labels is correct
+    assert metrics["f1"] == 0.5
 
 
 def test_vlm_6gb_vram_quantization_config():

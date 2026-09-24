@@ -42,10 +42,6 @@ const SATELLITE_PREVIEWS = {
     primary:
       "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80",
   },
-  object: {
-    primary:
-      "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1200&q=80",
-  },
   scene: {
     primary:
       "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1200&q=80",
@@ -91,17 +87,6 @@ const CAPABILITIES: CapabilityItem[] = [
     },
   },
   {
-    label: "Object detection",
-    detail: "Identify and count relevant objects in a scene.",
-    description:
-      "Spot vehicles, structures, and other notable objects at a glance and estimate what stands out in context.",
-    tag: "Feature scan",
-    preview: {
-      variant: "object",
-      ...SATELLITE_PREVIEWS.object,
-    },
-  },
-  {
     label: "Scene analysis",
     detail: "Explore what is visible in satellite imagery.",
     description:
@@ -122,7 +107,6 @@ function SatellitePreview({
   compact?: boolean;
 }) {
   const isTemporal = variant === "temporal";
-  const isObject = variant === "object";
   const isLandcover = variant === "landcover";
 
   return (
@@ -134,9 +118,7 @@ function SatellitePreview({
             ? "linear-gradient(180deg, rgba(8, 12, 18, 0.2), rgba(8, 12, 18, 0.55)), url(\"https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1200&q=80\") center/cover no-repeat"
             : variant === "landcover"
               ? "linear-gradient(180deg, rgba(6, 12, 16, 0.18), rgba(6, 12, 16, 0.6)), url(\"https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80\") center/cover no-repeat"
-              : variant === "object"
-                ? "linear-gradient(180deg, rgba(4, 10, 15, 0.12), rgba(4, 10, 15, 0.52)), url(\"https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1200&q=80\") center/cover no-repeat"
-                : "linear-gradient(180deg, rgba(8, 12, 18, 0.18), rgba(8, 12, 18, 0.56)), url(\"https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=1200&q=80\") center/cover no-repeat",
+              : "linear-gradient(180deg, rgba(8, 12, 18, 0.18), rgba(8, 12, 18, 0.56)), url(\"https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=1200&q=80\") center/cover no-repeat",
         transform: compact ? "scale(1.06)" : "scale(1.02)",
         transition: "transform 220ms ease, filter 220ms ease",
       }}
@@ -175,18 +157,6 @@ function SatellitePreview({
           <div className="absolute left-[30%] top-[20%] h-[32%] w-[42%] rounded-[28%] bg-cyan-300/10 blur-[2px]" />
           <div className="absolute right-[8%] top-[18%] h-[34%] w-[28%] rounded-[24%] bg-amber-200/10 blur-[2px]" />
           <div className="absolute inset-x-[18%] bottom-[10%] h-[24%] rounded-[30%] bg-slate-300/8 blur-[2px]" />
-        </>
-      )}
-
-      {isObject && (
-        <>
-          <div className="absolute left-[16%] top-[24%] h-10 w-14 rounded-md border border-cyan-300/70 bg-cyan-300/5" />
-          <div className="absolute left-[42%] top-[18%] h-12 w-16 rounded-md border border-cyan-300/70 bg-cyan-300/5" />
-          <div className="absolute right-[18%] top-[35%] h-9 w-12 rounded-md border border-cyan-300/70 bg-cyan-300/5" />
-          <div className="absolute left-[58%] bottom-[18%] h-8 w-14 rounded-md border border-cyan-300/70 bg-cyan-300/5" />
-          <div className="absolute left-[20%] top-[26%] h-2 w-2 rounded-full bg-cyan-200 shadow-[0_0_12px_rgba(103,232,249,0.8)]" />
-          <div className="absolute left-[48%] top-[20%] h-2 w-2 rounded-full bg-cyan-200 shadow-[0_0_12px_rgba(103,232,249,0.8)]" />
-          <div className="absolute right-[22%] top-[37%] h-2 w-2 rounded-full bg-cyan-200 shadow-[0_0_12px_rgba(103,232,249,0.8)]" />
         </>
       )}
 
